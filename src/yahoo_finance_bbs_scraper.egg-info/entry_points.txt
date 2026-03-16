@@ -1,0 +1,2 @@
+[console_scripts]
+yahoo-scrape = cli:main
