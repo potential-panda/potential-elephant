@@ -4,12 +4,13 @@ import os
 import random
 import re
 from datetime import datetime
-from typing import Dict, List, Optional, Tuple
+from typing import List, Optional, Set
 
+import pandas as pd
 from playwright.async_api import async_playwright
 from playwright_stealth import Stealth
 
-from elephant.framework import Harvester, HarvesterResult, HarvesterTask, Planner
+from elephant.framework import Harvester, HarvesterResult, HarvesterTask, Planner, Store
 
 USER_AGENTS = [
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36",
@@ -28,11 +29,37 @@ def generate_id(*args):
 
 
 class YahooFinanceHarvester(Harvester):
-    def get_url(self, params: dict) -> str:
-        ticker = params["ticker"]
+    def __init__(self, store: Store, ticker: str):
+        super().__init__(store)
         if not ticker.endswith(".T"):
             ticker = f"{ticker}.T"
-        return f"https://finance.yahoo.co.jp/quote/{ticker}/forum"
+        self.ticker = ticker
+        self.latest_ids = self._load_latest_ids()
+
+    def _load_latest_ids(self, count=5) -> Set[str]:
+        """Retrieve the latest N post IDs from the store for this ticker."""
+        path_pattern = os.path.join(
+            self.store.root_dir, "dataset=yahoo_comments", f"ticker={self.ticker}", "**", "data.parquet"
+        )
+        import glob
+        files = glob.glob(path_pattern, recursive=True)
+        if not files:
+            return set()
+        
+        try:
+            dfs = [pd.read_parquet(f) for f in files]
+            df = pd.concat(dfs, ignore_index=True)
+            if "post_datetime" in df.columns and "post_id" in df.columns:
+                df["post_datetime_dt"] = pd.to_datetime(df["post_datetime"])
+                latest_ids = df.sort_values(by="post_datetime_dt", ascending=False).head(count)["post_id"].tolist()
+                return set(latest_ids)
+        except Exception:
+            # We can log here if needed, but for now just return empty set
+            pass
+        return set()
+
+    def get_url(self, params: dict) -> str:
+        return f"https://finance.yahoo.co.jp/quote/{self.ticker}/forum"
 
     async def _get_page_content(self, page, url: str) -> bool:
         """Navigates to the URL with randomized jitter and stealth."""
@@ -63,12 +90,8 @@ class YahooFinanceHarvester(Harvester):
         return match.group(1) if match else None
 
     async def scrape(self, url: str, params: dict) -> dict[str, HarvesterResult]:
-        ticker = params.get("ticker")
-        if not ticker.endswith(".T"):
-            ticker = f"{ticker}.T"
-
-        max_pages = params.get("max_pages", 5)
-        max_comments = params.get("max_comments", 100)
+        max_pages = params.get("max_pages", 10)
+        max_comments = params.get("max_comments", 200)
         user_agent = random.choice(USER_AGENTS)
 
         async with async_playwright() as p:
@@ -79,6 +102,7 @@ class YahooFinanceHarvester(Harvester):
 
             evaluation_data = {}
             all_comments = []
+            stop_scrolling = False
 
             if await self._get_page_content(page, url):
                 # Extract Evaluation
@@ -98,14 +122,14 @@ class YahooFinanceHarvester(Harvester):
                         if eval_type:
                             evaluation_data[eval_type] = rate
 
-                evaluation_data["ticker"] = ticker
+                evaluation_data["ticker"] = self.ticker
                 scraped_at = datetime.now()
                 evaluation_data["scraped_at"] = scraped_at
-                evaluation_data["id"] = generate_id(ticker, scraped_at.strftime("%Y-%m-%d"))
+                evaluation_data["id"] = generate_id(self.ticker, scraped_at.strftime("%Y-%m-%d"))
 
                 # Extract Comments
                 current_page = 1
-                while current_page <= max_pages and len(all_comments) < max_comments:
+                while current_page <= max_pages and len(all_comments) < max_comments and not stop_scrolling:
                     comment_elements = await page.query_selector_all("li._InfiniteBbsList__item_1aetx_12")
                     existing_ids = {c["post_id"] for c in all_comments}
                     
@@ -116,29 +140,42 @@ class YahooFinanceHarvester(Harvester):
                         post_id_el = await el.query_selector("a._BbsItem__commentNo_qgr82_41")
                         post_id = self._extract_post_id(await post_id_el.get_attribute("href")) if post_id_el else None
                         
-                        if post_id and post_id not in existing_ids:
-                            time_el = await el.query_selector("time._BbsItem__postDate_qgr82_37")
-                            post_datetime_str = await time_el.inner_text() if time_el else None
-                            author_el = await el.query_selector("a._BbsItem__userName_qgr82_34")
-                            author = self._extract_user_id(await author_el.get_attribute("href")) if author_el else None
-                            body_el = await el.query_selector("div._BbsItem__body_qgr82_84")
-                            body = await body_el.inner_text() if body_el else None
-                            
-                            all_comments.append(
-                                {
-                                    "id": generate_id(ticker, post_id, author, post_datetime_str),
-                                    "ticker": ticker,
-                                    "post_id": post_id,
-                                    "post_datetime": post_datetime_str,
-                                    "author": author,
-                                    "body": body,
-                                    "scraped_at": datetime.now(),
-                                }
-                            )
-                            new_found += 1
-                    
-                    print(f"[{ticker}] Extracted {new_found} new comments (Total: {len(all_comments)})")
+                        if post_id:
+                            # Early exit if we hit a previously scraped comment
+                            if post_id in self.latest_ids:
+                                print(f"[{self.ticker}] Found previously scraped comment (ID: {post_id}). Stopping.")
+                                stop_scrolling = True
+                                break
 
+                            if post_id not in existing_ids:
+                                time_el = await el.query_selector("time._BbsItem__postDate_qgr82_37")
+                                post_datetime_str = await time_el.inner_text() if time_el else None
+                                author_el = await el.query_selector("a._BbsItem__userName_qgr82_34")
+                                author = (
+                                    self._extract_user_id(await author_el.get_attribute("href")) if author_el else None
+                                )
+                                body_el = await el.query_selector("div._BbsItem__body_qgr82_84")
+                                body = await body_el.inner_text() if body_el else None
+                                
+                                all_comments.append(
+                                    {
+                                        "id": generate_id(self.ticker, post_id, author, post_datetime_str),
+                                        "ticker": self.ticker,
+                                        "post_id": post_id,
+                                        "post_datetime": post_datetime_str,
+                                        "author": author,
+                                        "body": body,
+                                        "scraped_at": datetime.now(),
+                                    }
+                                )
+                                new_found += 1
+                    
+                    print(f"[{self.ticker}] Extracted {new_found} new comments (Total: {len(all_comments)})")
+
+                    if stop_scrolling:
+                        break
+
+                    bbs_item_selector = "document.querySelectorAll('li._InfiniteBbsList__item_1aetx_12')"
                     current_page += 1
                     if current_page <= max_pages and len(all_comments) < max_comments:
                         await page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
@@ -146,8 +183,8 @@ class YahooFinanceHarvester(Harvester):
                         try:
                             current_count = len(comment_elements)
                             await page.wait_for_function(
-                                f"document.querySelectorAll('li._InfiniteBbsList__item_1aetx_12').length > {current_count}",
-                                timeout=10000
+                                f"{bbs_item_selector}.length > {current_count}",
+                                timeout=10000,
                             )
                         except Exception:
                             break
@@ -156,20 +193,18 @@ class YahooFinanceHarvester(Harvester):
             results = {}
             if evaluation_data:
                 results["yahoo_evaluations"] = HarvesterResult(
-                    tags={"ticker": ticker, "date": scraped_at.strftime("%Y")},
-                    data=[evaluation_data]
+                    tags={"ticker": self.ticker, "date": scraped_at.strftime("%Y")}, data=[evaluation_data]
                 )
             if all_comments:
                 results["yahoo_comments"] = HarvesterResult(
-                    tags={"ticker": ticker, "date": scraped_at.strftime("%Y-%m-%d")},
-                    data=all_comments
+                    tags={"ticker": self.ticker, "date": scraped_at.strftime("%Y-%m-%d")}, data=all_comments
                 )
             return results
 
 
 class YahooFinancePlanner(Planner):
-    def __init__(self, harvester: Harvester, tickers_file: str):
-        self.harvester = harvester
+    def __init__(self, store: Store, tickers_file: str):
+        self.store = store
         self.tickers_file = tickers_file
 
     def _get_tickers(self) -> List[str]:
@@ -183,29 +218,31 @@ class YahooFinancePlanner(Planner):
         if not tickers:
             return []
 
-        random.shuffle(tickers)
         tasks = []
         
-        # Time range: 10:17 to 12:23
-        start_min = 10 * 60 + 17
-        end_min = 12 * 60 + 23
+        # Time range: 10:17 (617 mins) to 23:23 (1403 mins)
+        start_min = 617
+        end_min = 1423 
+        
+        available_minutes = list(range(start_min, end_min + 1))
+        random.shuffle(available_minutes)
         
         today = datetime.now()
         
-        for ticker in tickers:
-            random_min = random.randint(start_min, end_min)
-            scheduled_at = today.replace(
-                hour=random_min // 60, 
-                minute=random_min % 60, 
-                second=0, 
-                microsecond=0
-            )
+        for i, ticker in enumerate(tickers):
+            random_min = available_minutes[i % len(available_minutes)]
+            scheduled_at = today.replace(hour=random_min // 60, minute=random_min % 60, second=0, microsecond=0)
+            
+            # Create a NEW harvester instance for EACH ticker
+            harvester = YahooFinanceHarvester(self.store, ticker)
+            
             tasks.append(
                 HarvesterTask(
-                    harvester=self.harvester,
+                    harvester=harvester,
                     scheduled_at=scheduled_at,
-                    args={"ticker": ticker, "max_pages": 10, "max_comments": 200}
+                    args={"max_pages": 10, "max_comments": 200},
                 )
             )
         
+        random.shuffle(tasks)
         return tasks

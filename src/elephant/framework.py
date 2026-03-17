@@ -95,9 +95,8 @@ class Scheduler:
         tasks = self.planner.create()
         for task in tasks:
             time_str = task.scheduled_at.strftime("%H:%M")
-            schedule.every().day.at(time_str).do(
-                self._run_task, task=task
-            ).tag("daily-scrapes")
+            logging.info(f"Planning task {task.args} {time_str}")
+            schedule.every().day.at(time_str).do(self._run_task, task=task).tag("daily-scrapes")
         logging.info(f"Scheduled {len(tasks)} tasks.")
 
     def _run_task(self, task: HarvesterTask):
@@ -106,6 +105,7 @@ class Scheduler:
             asyncio.run(task.harvester.start(task.args))
         except Exception:
             logging.exception(f"Failed to execute task with args {task.args}")
+        return schedule.CancelJob
 
     def start(self):
         logging.info("Starting scheduler process...")

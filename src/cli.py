@@ -3,21 +3,9 @@ import asyncio
 import logging
 import os
 import random
-import sys
-from datetime import datetime
 
 import pandas as pd
-
-# Add external path for DtRange
-EXTERNAL_UTIL_PATH = "/home/lulurun/workspace/potential-panda-core/src"
-if EXTERNAL_UTIL_PATH not in sys.path:
-    sys.path.append(EXTERNAL_UTIL_PATH)
-
-try:
-    from qate.util.dt_range import DtRange
-except ImportError:
-    logging.warning("Could not import DtRange. Querying with range might be limited.")
-    DtRange = None
+from qate.util.dt_range import DtRange
 
 from elephant.framework import Scheduler, Store
 from elephant.harvester import YahooFinanceHarvester, YahooFinancePlanner
@@ -43,13 +31,14 @@ async def fetch_cmd(args):
     logging.info(f"Selected random tickers for fetch: {selected_tickers}")
 
     store = Store(DATA_DIR)
-    harvester = YahooFinanceHarvester(store)
 
     for ticker in selected_tickers:
         try:
             print(f"Fetching data for {ticker}...")
+            # Create a new harvester for this ticker
+            harvester = YahooFinanceHarvester(store, ticker)
             # We use a smaller scrape limit for fetch command
-            await harvester.start({"ticker": ticker, "max_pages": 1, "max_comments": 20})
+            await harvester.start({"max_pages": 1, "max_comments": 20})
             print(f"Finished fetching {ticker}")
         except Exception:
             logging.exception(f"Failed to fetch {ticker}")
@@ -65,6 +54,7 @@ def query_cmd(args):
     # We use glob to find all parquet files for the ticker
     path_pattern = os.path.join(DATA_DIR, f"dataset={args.dataset}", f"ticker={ticker}", "**", "data.parquet")
     import glob
+
     files = glob.glob(path_pattern, recursive=True)
 
     if not files:
@@ -77,11 +67,11 @@ def query_cmd(args):
             dfs.append(pd.read_parquet(f))
         except Exception as e:
             logging.warning(f"Failed to read {f}: {e}")
-    
+
     if not dfs:
         print("Failed to load any data.")
         return
-        
+
     df = pd.concat(dfs, ignore_index=True)
 
     if args.start:
@@ -89,11 +79,9 @@ def query_cmd(args):
             try:
                 dt_range = DtRange.from_strings(args.start, args.end)
                 target_days = dt_range.days
-                
+
                 # Check column for date filtering
-                # In framework, yahoo_comments has 'date' tag, yahoo_evaluations has 'date' tag (YEAR)
                 if args.dataset == "yahoo_comments":
-                    # Filter by scraped_at or derive from it
                     df["date_tmp"] = pd.to_datetime(df["scraped_at"]).dt.strftime("%Y-%m-%d")
                     df = df[df["date_tmp"].isin(target_days)]
                 elif args.dataset == "yahoo_evaluations":
@@ -107,10 +95,10 @@ def query_cmd(args):
         if "post_datetime" in df.columns:
             df["post_datetime_dt"] = pd.to_datetime(df["post_datetime"])
             df = df.sort_values(by=["post_datetime_dt", "post_id"], ascending=[False, False])
-        
+
         if not args.start and not args.end:
             df = df.head(200)
-        
+
         if not df.empty:
             print(f"\n--- Top {len(df)} comments for {ticker} ---")
             for _, row in df.iterrows():
@@ -152,16 +140,18 @@ def main():
         query_cmd(args)
     elif args.command == "schedule":
         store = Store(DATA_DIR)
-        harvester = YahooFinanceHarvester(store)
-        planner = YahooFinancePlanner(harvester, TICKERS_FILE)
+        planner = YahooFinancePlanner(store, TICKERS_FILE)
         scheduler = Scheduler(planner)
-        
+
         if args.dry_run:
             tasks = planner.create()
             print("--- Daily Execution Plan (Dry Run) ---")
+            # Sort for display
             tasks.sort(key=lambda x: x.scheduled_at)
             for task in tasks:
-                print(f"{task.scheduled_at.strftime('%H:%M')} - {task.args['ticker']}")
+                # Get ticker from the harvester instance since it's no longer in args
+                ticker = task.harvester.ticker
+                print(f"{task.scheduled_at.strftime('%H:%M')} - {ticker}")
             print(f"Total tasks: {len(tasks)}")
         else:
             scheduler.start()
