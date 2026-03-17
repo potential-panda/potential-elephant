@@ -97,8 +97,14 @@ def query_cmd(args):
                 dt_range = DtRange.from_strings(args.start, args.end)
                 target_days = dt_range.days
                 
-                df["date_tmp"] = pd.to_datetime(df["scraped_at"]).dt.strftime("%Y-%m-%d")
-                df = df[df["date_tmp"].isin(target_days)]
+                # Check column for date filtering
+                if args.dataset == "yahoo_comments":
+                    df["date_tmp"] = pd.to_datetime(df["scraped_at"]).dt.strftime("%Y-%m-%d")
+                    df = df[df["date_tmp"].isin(target_days)]
+                elif args.dataset in ["yahoo_evaluations", "minkabu_raw_html"]:
+                    # Both use YEAR partitioning, but we can filter by exact date using scraped_at
+                    df["date_tmp"] = pd.to_datetime(df["scraped_at"]).dt.strftime("%Y-%m-%d")
+                    df = df[df["date_tmp"].isin(target_days)]
             except Exception as e:
                 print(f"Error processing date range: {e}")
 
@@ -120,8 +126,11 @@ def query_cmd(args):
         df = df.sort_values(by="scraped_at", ascending=False)
         if not df.empty:
             latest = df.iloc[0]
-            print(f"\n--- Latest Minkabu HTML for {ticker} ({latest['scraped_at']}) ---")
-            print(latest["raw_html"][:1000] + "...")
+            print(f"\n--- Latest Minkabu Data for {ticker} ({latest['scraped_at']}) ---")
+            for field in ["analysis", "research", "pick", "analyst_consensus"]:
+                content = latest.get(field, "")
+                print(f"\n[{field.upper()}] (length: {len(content)})")
+                print(content[:500] + "..." if len(content) > 500 else content)
         else:
             print("No Minkabu data found.")
     else:
