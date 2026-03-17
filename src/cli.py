@@ -8,26 +8,19 @@ import pandas as pd
 from qate.util.dt_range import DtRange
 
 from elephant.framework import Scheduler, Store
-from elephant.harvester import YahooFinanceHarvester, YahooFinancePlanner
+from elephant.tickers import get_tickers
+from elephant.yjp.harvester import YahooFinanceHarvester
+from elephant.yjp.planner import YahooFinancePlanner
 
 TICKERS_FILE = "tickers.txt"
 DATA_DIR = "./data"
 
 
-def get_tickers():
-    if not os.path.exists(TICKERS_FILE):
-        logging.error(f"{TICKERS_FILE} not found.")
-        return []
-    with open(TICKERS_FILE, "r") as f:
-        return [line.strip() for line in f if line.strip()]
-
-
 async def fetch_cmd(args):
-    tickers = get_tickers()
-    if not tickers:
+    selected_tickers = get_tickers(TICKERS_FILE, num=5)
+    if not selected_tickers:
         return
 
-    selected_tickers = random.sample(tickers, min(5, len(tickers)))
     logging.info(f"Selected random tickers for fetch: {selected_tickers}")
 
     store = Store(DATA_DIR)

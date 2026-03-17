@@ -10,7 +10,7 @@ import pandas as pd
 from playwright.async_api import async_playwright
 from playwright_stealth import Stealth
 
-from elephant.framework import Harvester, HarvesterResult, HarvesterTask, Planner, Store
+from elephant.framework import Harvester, HarvesterResult, Store
 
 USER_AGENTS = [
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36",
@@ -54,7 +54,6 @@ class YahooFinanceHarvester(Harvester):
                 latest_ids = df.sort_values(by="post_datetime_dt", ascending=False).head(count)["post_id"].tolist()
                 return set(latest_ids)
         except Exception:
-            # We can log here if needed, but for now just return empty set
             pass
         return set()
 
@@ -200,49 +199,3 @@ class YahooFinanceHarvester(Harvester):
                     tags={"ticker": self.ticker, "date": scraped_at.strftime("%Y-%m-%d")}, data=all_comments
                 )
             return results
-
-
-class YahooFinancePlanner(Planner):
-    def __init__(self, store: Store, tickers_file: str):
-        self.store = store
-        self.tickers_file = tickers_file
-
-    def _get_tickers(self) -> List[str]:
-        if not os.path.exists(self.tickers_file):
-            return []
-        with open(self.tickers_file, "r") as f:
-            return [line.strip() for line in f if line.strip()]
-
-    def create(self) -> List[HarvesterTask]:
-        tickers = self._get_tickers()
-        if not tickers:
-            return []
-
-        tasks = []
-        
-        # Time range: 10:17 (617 mins) to 23:23 (1403 mins)
-        start_min = 617
-        end_min = 1423 
-        
-        available_minutes = list(range(start_min, end_min + 1))
-        random.shuffle(available_minutes)
-        
-        today = datetime.now()
-        
-        for i, ticker in enumerate(tickers):
-            random_min = available_minutes[i % len(available_minutes)]
-            scheduled_at = today.replace(hour=random_min // 60, minute=random_min % 60, second=0, microsecond=0)
-            
-            # Create a NEW harvester instance for EACH ticker
-            harvester = YahooFinanceHarvester(self.store, ticker)
-            
-            tasks.append(
-                HarvesterTask(
-                    harvester=harvester,
-                    scheduled_at=scheduled_at,
-                    args={"max_pages": 10, "max_comments": 200},
-                )
-            )
-        
-        random.shuffle(tasks)
-        return tasks
