@@ -1,4 +1,6 @@
 import asyncio
+import hashlib
+import os
 import random
 import re
 from datetime import datetime
@@ -6,6 +8,8 @@ from typing import Dict, List, Optional, Tuple
 
 from playwright.async_api import async_playwright
 from playwright_stealth import Stealth
+
+from elephant.framework import Harvester, HarvesterResult, HarvesterTask, Planner
 
 USER_AGENTS = [
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36",
@@ -18,13 +22,17 @@ USER_AGENTS = [
 ]
 
 
-class YahooFinanceHarvester:
-    def __init__(self, ticker: str):
-        self.ticker = ticker
+def generate_id(*args):
+    content = "|".join(str(arg) for arg in args)
+    return hashlib.md5(content.encode()).hexdigest()
+
+
+class YahooFinanceHarvester(Harvester):
+    def get_url(self, params: dict) -> str:
+        ticker = params["ticker"]
         if not ticker.endswith(".T"):
-            self.ticker = f"{ticker}.T"
-        self.base_url = f"https://finance.yahoo.co.jp/quote/{self.ticker}/forum"
-        self.user_agent = random.choice(USER_AGENTS)
+            ticker = f"{ticker}.T"
+        return f"https://finance.yahoo.co.jp/quote/{ticker}/forum"
 
     async def _get_page_content(self, page, url: str) -> bool:
         """Navigates to the URL with randomized jitter and stealth."""
@@ -34,7 +42,6 @@ class YahooFinanceHarvester:
 
         try:
             await page.goto(url, wait_until="domcontentloaded", timeout=60000)
-            # Wait for either evaluation or comments to appear
             await page.wait_for_selector(
                 "._EvaluationGraph__graph_xyp4h_72, ._InfiniteBbsList__item_1aetx_12", timeout=30000
             )
@@ -55,23 +62,32 @@ class YahooFinanceHarvester:
         match = re.search(r"user=([^&]+)", href)
         return match.group(1) if match else None
 
-    async def scrape(self, max_pages: int = 5, max_comments: int = 100) -> Tuple[Dict, List[Dict]]:
+    async def scrape(self, url: str, params: dict) -> dict[str, HarvesterResult]:
+        ticker = params.get("ticker")
+        if not ticker.endswith(".T"):
+            ticker = f"{ticker}.T"
+
+        max_pages = params.get("max_pages", 5)
+        max_comments = params.get("max_comments", 100)
+        user_agent = random.choice(USER_AGENTS)
+
         async with async_playwright() as p:
             browser = await p.chromium.launch(headless=True)
-            context = await browser.new_context(user_agent=self.user_agent)
+            context = await browser.new_context(user_agent=user_agent)
             page = await context.new_page()
             await Stealth().apply_stealth_async(page)
 
             evaluation_data = {}
             all_comments = []
 
-            if await self._get_page_content(page, self.base_url):
+            if await self._get_page_content(page, url):
+                # Extract Evaluation
                 eval_container = await page.query_selector("._EvaluationGraph__graph_xyp4h_72")
                 if eval_container:
                     spans = await eval_container.query_selector_all("span")
                     for span in spans:
-                        style = await span.get_attribute("style")
                         cls = await span.get_attribute("class")
+                        style = await span.get_attribute("style")
                         width_match = re.search(r"width:([\d.]+)%", style or "")
                         rate = float(width_match.group(1)) if width_match else 0.0
                         eval_type = None
@@ -82,15 +98,15 @@ class YahooFinanceHarvester:
                         if eval_type:
                             evaluation_data[eval_type] = rate
 
-                evaluation_data["ticker"] = self.ticker
-                evaluation_data["scraped_at"] = datetime.now()
+                evaluation_data["ticker"] = ticker
+                scraped_at = datetime.now()
+                evaluation_data["scraped_at"] = scraped_at
+                evaluation_data["id"] = generate_id(ticker, scraped_at.strftime("%Y-%m-%d"))
 
+                # Extract Comments
                 current_page = 1
                 while current_page <= max_pages and len(all_comments) < max_comments:
                     comment_elements = await page.query_selector_all("li._InfiniteBbsList__item_1aetx_12")
-                    
-                    # Extract comments from the currently loaded set
-                    # We use a set of post_ids to avoid duplicates during scrolling
                     existing_ids = {c["post_id"] for c in all_comments}
                     
                     new_found = 0
@@ -110,7 +126,8 @@ class YahooFinanceHarvester:
                             
                             all_comments.append(
                                 {
-                                    "ticker": self.ticker,
+                                    "id": generate_id(ticker, post_id, author, post_datetime_str),
+                                    "ticker": ticker,
                                     "post_id": post_id,
                                     "post_datetime": post_datetime_str,
                                     "author": author,
@@ -120,28 +137,75 @@ class YahooFinanceHarvester:
                             )
                             new_found += 1
                     
-                    print(f"Extracted {new_found} new comments (Total: {len(all_comments)})")
+                    print(f"[{ticker}] Extracted {new_found} new comments (Total: {len(all_comments)})")
 
                     current_page += 1
                     if current_page <= max_pages and len(all_comments) < max_comments:
-                        # Scroll to bottom to trigger AJAX
-                        print(f"Scrolling for more comments (Target Page {current_page})...")
                         await page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
-                        
-                        # Randomized jitter after scroll
-                        wait_time = random.uniform(3, 8)
-                        await asyncio.sleep(wait_time)
-                        
-                        # Wait for more elements to load or a short timeout
+                        await asyncio.sleep(random.uniform(3, 8))
                         try:
-                            # We check if the number of li elements increases
                             current_count = len(comment_elements)
                             await page.wait_for_function(
                                 f"document.querySelectorAll('li._InfiniteBbsList__item_1aetx_12').length > {current_count}",
                                 timeout=10000
                             )
                         except Exception:
-                            print("No more comments loaded or timeout reached.")
                             break
             await browser.close()
-            return evaluation_data, all_comments
+            
+            results = {}
+            if evaluation_data:
+                results["yahoo_evaluations"] = HarvesterResult(
+                    tags={"ticker": ticker, "date": scraped_at.strftime("%Y")},
+                    data=[evaluation_data]
+                )
+            if all_comments:
+                results["yahoo_comments"] = HarvesterResult(
+                    tags={"ticker": ticker, "date": scraped_at.strftime("%Y-%m-%d")},
+                    data=all_comments
+                )
+            return results
+
+
+class YahooFinancePlanner(Planner):
+    def __init__(self, harvester: Harvester, tickers_file: str):
+        self.harvester = harvester
+        self.tickers_file = tickers_file
+
+    def _get_tickers(self) -> List[str]:
+        if not os.path.exists(self.tickers_file):
+            return []
+        with open(self.tickers_file, "r") as f:
+            return [line.strip() for line in f if line.strip()]
+
+    def create(self) -> List[HarvesterTask]:
+        tickers = self._get_tickers()
+        if not tickers:
+            return []
+
+        random.shuffle(tickers)
+        tasks = []
+        
+        # Time range: 10:17 to 12:23
+        start_min = 10 * 60 + 17
+        end_min = 12 * 60 + 23
+        
+        today = datetime.now()
+        
+        for ticker in tickers:
+            random_min = random.randint(start_min, end_min)
+            scheduled_at = today.replace(
+                hour=random_min // 60, 
+                minute=random_min % 60, 
+                second=0, 
+                microsecond=0
+            )
+            tasks.append(
+                HarvesterTask(
+                    harvester=self.harvester,
+                    scheduled_at=scheduled_at,
+                    args={"ticker": ticker, "max_pages": 10, "max_comments": 200}
+                )
+            )
+        
+        return tasks
