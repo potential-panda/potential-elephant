@@ -95,7 +95,7 @@ class Scheduler:
         tasks = self.planner.create()
         for task in tasks:
             time_str = task.scheduled_at.strftime("%H:%M")
-            logging.info(f"Planning task {task.args} {time_str}")
+            logging.info(f"Planning task args {task.args} at {time_str}")
             schedule.every().day.at(time_str).do(self._run_task, task=task).tag("daily-scrapes")
         logging.info(f"Scheduled {len(tasks)} tasks.")
 

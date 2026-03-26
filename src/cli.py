@@ -2,33 +2,22 @@ import argparse
 import asyncio
 import logging
 import os
-import random
-import sys
-from datetime import datetime
 from typing import List
 
 import pandas as pd
-
-# Add external path for DtRange
-EXTERNAL_UTIL_PATH = "/home/lulurun/workspace/potential-panda-core/src"
-if EXTERNAL_UTIL_PATH not in sys.path:
-    sys.path.append(EXTERNAL_UTIL_PATH)
-
-try:
-    from qate.util.dt_range import DtRange
-except ImportError:
-    logging.warning("Could not import DtRange. Querying with range might be limited.")
-    DtRange = None
+from qate.util.dt_range import DtRange
 
 from elephant.framework import HarvesterTask, Planner, Scheduler, Store
+from elephant.minkabu.harvester import MinkabuHarvester
+from elephant.minkabu.planner import MinkabuPlanner
 from elephant.tickers import get_tickers
 from elephant.yjp.harvester import YahooFinanceHarvester
 from elephant.yjp.planner import YahooFinancePlanner
-from elephant.minkabu.harvester import MinkabuHarvester
-from elephant.minkabu.planner import MinkabuPlanner
+from elephant.yjp_bbs_rank.harvester import BbsRankHarvester
+from elephant.yjp_bbs_rank.planner import BbsRankPlanner
 
 TICKERS_FILE = "tickers.txt"
-DATA_DIR = "./data"
+DATA_DIR = "/panda-infra/elephant"
 
 
 class MultiPlanner(Planner):
@@ -43,12 +32,23 @@ class MultiPlanner(Planner):
 
 
 async def fetch_cmd(args):
-    selected_tickers = get_tickers(TICKERS_FILE, num=5)
+    store = Store(DATA_DIR)
+
+    if args.dataset == "yjp_bbs_rank":
+        try:
+            print("\n--- Fetching BBS ranking tickers ---")
+            harvester = BbsRankHarvester(store, TICKERS_FILE)
+            await harvester.start({})
+            print("Finished fetching BBS ranking")
+        except Exception:
+            logging.exception("Failed to fetch BBS ranking")
+        return
+
+    selected_tickers = get_tickers(TICKERS_FILE, num=2)
     if not selected_tickers:
         return
 
     logging.info(f"Selected random tickers for fetch: {selected_tickers}")
-    store = Store(DATA_DIR)
 
     for ticker in selected_tickers:
         try:
@@ -72,6 +72,7 @@ def query_cmd(args):
 
     path_pattern = os.path.join(DATA_DIR, f"dataset={args.dataset}", f"ticker={ticker}", "**", "data.parquet")
     import glob
+
     files = glob.glob(path_pattern, recursive=True)
 
     if not files:
@@ -84,11 +85,11 @@ def query_cmd(args):
             dfs.append(pd.read_parquet(f))
         except Exception as e:
             logging.warning(f"Failed to read {f}: {e}")
-    
+
     if not dfs:
         print("Failed to load any data.")
         return
-        
+
     df = pd.concat(dfs, ignore_index=True)
 
     if args.start:
@@ -96,7 +97,7 @@ def query_cmd(args):
             try:
                 dt_range = DtRange.from_strings(args.start, args.end)
                 target_days = dt_range.days
-                
+
                 # Check column for date filtering
                 if args.dataset == "yahoo_comments":
                     df["date_tmp"] = pd.to_datetime(df["scraped_at"]).dt.strftime("%Y-%m-%d")
@@ -112,10 +113,10 @@ def query_cmd(args):
         if "post_datetime" in df.columns:
             df["post_datetime_dt"] = pd.to_datetime(df["post_datetime"])
             df = df.sort_values(by=["post_datetime_dt", "post_id"], ascending=[False, False])
-        
+
         if not args.start and not args.end:
-            df = df.head(200)
-        
+            df = df.head(500)
+
         if not df.empty:
             print(f"\n--- Top {len(df)} comments for {ticker} ---")
             for _, row in df.iterrows():
@@ -146,8 +147,10 @@ def main():
     # Fetch command
     fetch_parser = subparsers.add_parser("fetch", help="Fetch data for 5 random stocks (testing)")
     fetch_parser.add_argument(
-        "--dataset", choices=["yahoo_comments", "yahoo_evaluations", "minkabu_raw_html"], 
-        required=True, help="Target dataset to display"
+        "--dataset",
+        choices=["yahoo_comments", "yahoo_evaluations", "minkabu_raw_html", "yjp_bbs_rank"],
+        required=True,
+        help="Target dataset to display",
     )
 
     # Schedule command
@@ -156,7 +159,9 @@ def main():
 
     # Query command
     query_parser = subparsers.add_parser("query", help="Query the stored dataset")
-    query_parser.add_argument("--dataset", choices=["yahoo_comments", "yahoo_evaluations", "minkabu_raw_html"], required=True)
+    query_parser.add_argument(
+        "--dataset", choices=["yahoo_comments", "yahoo_evaluations", "minkabu_raw_html"], required=True
+    )
     query_parser.add_argument("--ticker", required=True)
     query_parser.add_argument("--start", help="Start date (YYYY-MM-DD or YYYYMMDD)")
     query_parser.add_argument("--end", help="End date (YYYY-MM-DD or YYYYMMDD)")
@@ -169,21 +174,26 @@ def main():
         query_cmd(args)
     elif args.command == "schedule":
         store = Store(DATA_DIR)
-        
+
+        bbs_rank_planner = BbsRankPlanner(store, TICKERS_FILE)
         yjp_planner = YahooFinancePlanner(store, TICKERS_FILE)
         minkabu_planner = MinkabuPlanner(store, TICKERS_FILE)
-        
-        multi_planner = MultiPlanner([yjp_planner, minkabu_planner])
+
+        multi_planner = MultiPlanner([bbs_rank_planner, yjp_planner, minkabu_planner])
         scheduler = Scheduler(multi_planner)
-        
+
         if args.dry_run:
             tasks = multi_planner.create()
             print("--- Daily Execution Plan (Dry Run) ---")
             tasks.sort(key=lambda x: x.scheduled_at)
             for task in tasks:
-                ticker = task.harvester.ticker
-                source = "YJP" if isinstance(task.harvester, YahooFinanceHarvester) else "Minkabu"
-                print(f"{task.scheduled_at.strftime('%H:%M')} - {ticker} ({source})")
+                if isinstance(task.harvester, YahooFinanceHarvester):
+                    label = f"{task.harvester.ticker} (YJP)"
+                elif isinstance(task.harvester, MinkabuHarvester):
+                    label = f"{task.harvester.ticker} (Minkabu)"
+                else:
+                    label = "BBS Rank Update"
+                print(f"{task.scheduled_at.strftime('%H:%M')} - {label}")
             print(f"Total tasks: {len(tasks)}")
         else:
             scheduler.start()

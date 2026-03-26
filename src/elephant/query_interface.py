@@ -3,7 +3,7 @@ import os
 import duckdb
 import pandas as pd
 
-DATA_DIR = "./data"
+DATA_DIR = "/panda-infra/elephant"
 COMMENTS_DIR = os.path.join(DATA_DIR, "dataset=yahoo_comments")
 EVAL_DIR = os.path.join(DATA_DIR, "dataset=yahoo_evaluations")
 

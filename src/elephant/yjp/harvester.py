@@ -4,7 +4,7 @@ import os
 import random
 import re
 from datetime import datetime
-from typing import List, Optional, Set
+from typing import Optional
 
 import pandas as pd
 from playwright.async_api import async_playwright
@@ -36,26 +36,25 @@ class YahooFinanceHarvester(Harvester):
         self.ticker = ticker
         self.latest_ids = self._load_latest_ids()
 
-    def _load_latest_ids(self, count=5) -> Set[str]:
-        """Retrieve the latest N post IDs from the store for this ticker."""
+    def _load_latest_ids(self) -> int:
+        """Return the maximum post_id already stored for this ticker, or 0 if none."""
         path_pattern = os.path.join(
             self.store.root_dir, "dataset=yahoo_comments", f"ticker={self.ticker}", "**", "data.parquet"
         )
         import glob
+
         files = glob.glob(path_pattern, recursive=True)
         if not files:
-            return set()
-        
+            return 0
+
         try:
-            dfs = [pd.read_parquet(f) for f in files]
+            dfs = [pd.read_parquet(f, columns=["post_id"]) for f in files]
             df = pd.concat(dfs, ignore_index=True)
-            if "post_datetime" in df.columns and "post_id" in df.columns:
-                df["post_datetime_dt"] = pd.to_datetime(df["post_datetime"])
-                latest_ids = df.sort_values(by="post_datetime_dt", ascending=False).head(count)["post_id"].tolist()
-                return set(latest_ids)
+            if "post_id" in df.columns:
+                return int(df["post_id"].astype(int).max())
         except Exception:
             pass
-        return set()
+        return 0
 
     def get_url(self, params: dict) -> str:
         return f"https://finance.yahoo.co.jp/quote/{self.ticker}/forum"
@@ -131,18 +130,18 @@ class YahooFinanceHarvester(Harvester):
                 while current_page <= max_pages and len(all_comments) < max_comments and not stop_scrolling:
                     comment_elements = await page.query_selector_all("li._InfiniteBbsList__item_1aetx_12")
                     existing_ids = {c["post_id"] for c in all_comments}
-                    
+
                     new_found = 0
                     for el in comment_elements:
                         if len(all_comments) >= max_comments:
                             break
                         post_id_el = await el.query_selector("a._BbsItem__commentNo_qgr82_41")
                         post_id = self._extract_post_id(await post_id_el.get_attribute("href")) if post_id_el else None
-                        
+
                         if post_id:
                             # Early exit if we hit a previously scraped comment
-                            if post_id in self.latest_ids:
-                                print(f"[{self.ticker}] Found previously scraped comment (ID: {post_id}). Stopping.")
+                            if self.latest_ids > 0 and int(post_id) <= self.latest_ids:
+                                print(f"[{self.ticker}] Found previously scraped comment (ID: {post_id} <= max stored {self.latest_ids}). Stopping.")
                                 stop_scrolling = True
                                 break
 
@@ -155,7 +154,7 @@ class YahooFinanceHarvester(Harvester):
                                 )
                                 body_el = await el.query_selector("div._BbsItem__body_qgr82_84")
                                 body = await body_el.inner_text() if body_el else None
-                                
+
                                 all_comments.append(
                                     {
                                         "id": generate_id(self.ticker, post_id, author, post_datetime_str),
@@ -168,7 +167,7 @@ class YahooFinanceHarvester(Harvester):
                                     }
                                 )
                                 new_found += 1
-                    
+
                     print(f"[{self.ticker}] Extracted {new_found} new comments (Total: {len(all_comments)})")
 
                     if stop_scrolling:
@@ -188,7 +187,7 @@ class YahooFinanceHarvester(Harvester):
                         except Exception:
                             break
             await browser.close()
-            
+
             results = {}
             if evaluation_data:
                 results["yahoo_evaluations"] = HarvesterResult(

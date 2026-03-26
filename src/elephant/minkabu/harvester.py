@@ -1,10 +1,9 @@
 import asyncio
 import hashlib
-import os
 import random
 import re
 from datetime import datetime
-from typing import Dict, List, Optional
+from typing import Optional
 
 from playwright.async_api import async_playwright
 from playwright_stealth import Stealth
@@ -22,7 +21,7 @@ class MinkabuHarvester(Harvester):
         super().__init__(store)
         if not ticker.endswith(".T"):
             ticker = f"{ticker}.T"
-        self.normalized_ticker = ticker
+        self.ticker = ticker
         # Remove .T for URL construction
         self.minkabu_ticker = ticker.replace(".T", "")
 
@@ -34,13 +33,13 @@ class MinkabuHarvester(Harvester):
         """Remove noise to save tokens/storage for later LLM parsing."""
         if not html:
             return ""
-        
+
         # Remove scripts, styles, and SVG blocks
         html = re.sub(r"<script.*?>.*?</script>", "", html, flags=re.DOTALL)
         html = re.sub(r"<style.*?>.*?</style>", "", html, flags=re.DOTALL)
         html = re.sub(r"<svg.*?>.*?</svg>", "", html, flags=re.DOTALL)
         html = re.sub(r"<noscript.*?>.*?</noscript>", "", html, flags=re.DOTALL)
-        
+
         # Collapse multiple whitespaces and newlines
         html = re.sub(r"\s+", " ", html).strip()
         return html
@@ -70,14 +69,14 @@ class MinkabuHarvester(Harvester):
             await Stealth().apply_stealth_async(page)
 
             scraped_at = datetime.now()
-            
+
             sub_pages = ["analysis", "research", "pick", "analyst_consensus"]
             data_record = {
-                "id": generate_id(self.normalized_ticker, scraped_at.strftime("%Y-%m-%d"), "minkabu_combined"),
-                "ticker": self.normalized_ticker,
-                "scraped_at": scraped_at
+                "id": generate_id(self.ticker, scraped_at.strftime("%Y-%m-%d"), "minkabu_combined"),
+                "ticker": self.ticker,
+                "scraped_at": scraped_at,
             }
-            
+
             found_any = False
             for sub in sub_pages:
                 target_url = f"https://minkabu.jp/stock/{self.minkabu_ticker}/{sub}"
@@ -87,11 +86,10 @@ class MinkabuHarvester(Harvester):
                     found_any = True
 
             await browser.close()
-            
+
             results = {}
             if found_any:
                 results["minkabu_raw_html"] = HarvesterResult(
-                    tags={"ticker": self.normalized_ticker, "YEAR": scraped_at.strftime("%Y")},
-                    data=[data_record]
+                    tags={"ticker": self.ticker, "YEAR": scraped_at.strftime("%Y")}, data=[data_record]
                 )
             return results
