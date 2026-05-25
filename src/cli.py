@@ -2,6 +2,7 @@ import argparse
 import asyncio
 import logging
 import os
+from datetime import datetime
 from typing import List
 
 import pandas as pd
@@ -139,6 +140,24 @@ def query_cmd(args):
         print(df.head(20))
 
 
+def digest_cmd(args):
+    from elephant.synthesizer import Synthesizer
+
+    synthesizer = Synthesizer(DATA_DIR, TICKERS_FILE)
+    logging.info("Generating digest...")
+    digest = synthesizer.generate()
+
+    print("\n" + digest)
+
+    digests_dir = os.path.join(DATA_DIR, "digests")
+    os.makedirs(digests_dir, exist_ok=True)
+    date_str = datetime.now().strftime("%Y-%m-%d")
+    output_path = os.path.join(digests_dir, f"{date_str}.md")
+    with open(output_path, "w", encoding="utf-8") as f:
+        f.write(digest)
+    logging.info(f"Digest saved to {output_path}")
+
+
 def main():
     logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
     parser = argparse.ArgumentParser(description="Yahoo Japan Finance BBS Scraper CLI")
@@ -166,12 +185,17 @@ def main():
     query_parser.add_argument("--start", help="Start date (YYYY-MM-DD or YYYYMMDD)")
     query_parser.add_argument("--end", help="End date (YYYY-MM-DD or YYYYMMDD)")
 
+    # Digest command
+    subparsers.add_parser("digest", help="Generate a daily research digest using LLM synthesis")
+
     args = parser.parse_args()
 
     if args.command == "fetch":
         asyncio.run(fetch_cmd(args))
     elif args.command == "query":
         query_cmd(args)
+    elif args.command == "digest":
+        digest_cmd(args)
     elif args.command == "schedule":
         store = Store(DATA_DIR)
 
