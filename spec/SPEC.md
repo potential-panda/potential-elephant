@@ -2,6 +2,7 @@
 
 **Status:** Active Development
 **Last updated:** 2026-05-23
+**Note:** This spec iterates with usage. The real requirement only becomes clear once the digest is running and the user sees what feels like a door vs. noise.
 
 ---
 
@@ -10,6 +11,10 @@
 Potential Elephant is a **research scout**. It monitors a broad set of financial signals across JP and US markets, then surfaces a short list of "doors" — areas, sectors, stocks, or ETFs worth the user's attention. The user investigates and decides. The system never trades.
 
 **The goal is discovery, not prediction.**
+
+The core problem it solves: **you can't search for something you don't know exists.** Without a signal pointing at NBIS or CLSK, you'd never type those tickers into a search box. The system's job is to be the person who already found the door and is telling you it's there.
+
+This means **discovery breadth matters more than analytical depth.** A digest that surfaces 5 names the user has never heard of — with just enough context to decide if they're worth 30 minutes of research — is more valuable than a deep report on a stock they already follow.
 
 A good output is: *"The semiconductor supply chain is getting unusual TDnet activity this week, and BBS sentiment on three mid-cap names has turned sharply bullish. You probably haven't looked at these."*
 
@@ -48,22 +53,33 @@ Semiconductor: 4 TDnet earnings revisions upward in past 48h (Renesas, Rohm, +2 
 BBS discussion volume up 3x on 6723.T (Renesas). Analyst consensus on Minkabu shifted to "strong buy" this week.
 → Sector may be turning. Worth a look at ETF 1545 (Nikkei Semi ETF) or individual names.
 
-[STOCK HINT]
-4385.T (Mercari): Minkabu analyst consensus flipped neutral→buy in 48h.
-BBS evaluation: strongest+strong went from 40% → 71% over 2 weeks.
-No recent TDnet release — move may be anticipatory.
-→ Worth reading recent IR and news before the next earnings date.
+[STOCK HINT — NEW NAME]
+NBIS (Nebius Group): JP BBS discussion appeared this week, tone strongly bullish.
+Not a JP stock — US-listed AI infrastructure company. You likely haven't seen this one.
+→ Worth researching what they do before deciding if the sentiment makes sense.
+
+[STOCK HINT — HOLDING SIGNAL]
+4385.T (Mercari): price down 12% this week. BBS sentiment unchanged — strongest+strong still at 68%.
+Analyst consensus on Minkabu holding at "buy". No negative TDnet release found.
+→ If you hold this, the thesis may still be intact. Worth re-reading your original reasoning.
 
 [NEWS ITEM]
 Reuters JP: "Japan to expand chip subsidy program" — 3 articles in 24h clustering around TSMC Kumamoto plant ramp.
 → Upstream suppliers (photomasks, chemicals) may be underpriced relative to the theme.
 ```
 
+### Hint types
+- **New name:** a ticker or area the user is unlikely to know, surfaced by unusual BBS/sentiment activity
+- **Holding signal:** price dropped but sentiment held — worth revisiting the thesis before reacting
+- **Sector theme:** multiple signals pointing at the same industry or macro trend
+- **News cluster:** multiple sources covering the same story — indicates something is building
+
 ### Principles
 - **Short.** 5-8 hints maximum. Quality over coverage.
 - **Source-cited.** Every hint states which signal triggered it.
 - **Opinionated but humble.** "Worth looking at" not "Buy this."
-- **Novel.** If the user already knows it, it's not worth including.
+- **Novel.** Prioritize names the user does not already follow. Known names only appear if the signal is unusual (e.g. holding signal during a dip).
+- **JP BBS covers US stocks too.** JP retail community discusses US names (AMD, NVDA, etc.) — treat these as valid discovery signals, not noise.
 
 ---
 
@@ -117,18 +133,23 @@ Both modes run together in the digest.
 - BBS rank scraper (updates `tickers.txt` with hot tickers daily)
 - Scheduler + Parquet storage
 
-### Phase 2 — Catalyst & Price Data
+### Phase 2 — Early Digest (with Phase 1 data only)
+Build a basic digest using BBS + Minkabu data already collected, to validate the output format and see what "feels like a door" before investing in more data sources. The digest will be thin but usable.
+- Build `Synthesizer` with Phase 1 signals only (BBS rank, evaluations, Minkabu consensus)
+- Add `python src/cli.py digest` command
+- Run it, read it, adjust the prompt until the output feels right
+
+### Phase 3 — Catalyst & Price Data
 - Integrate TDnet into the elephant harvester framework (port `src/ingestion/tdnet.py`)
 - Add yfinance harvester: daily OHLCV, 52-week range, volume vs. average
 - Add RSS news harvester: fetch + deduplicate headlines from Nikkei / Reuters JP / NHK Business
+- Feed new sources into the existing Synthesizer
 
-### Phase 3 — LLM Synthesis
-- Build a `Synthesizer` that collects the last 48h of stored signals
-- Call Claude API with a structured prompt to produce the digest
-- Output: markdown report printed to console and saved to `data/digests/YYYY-MM-DD.md`
-- Add `python src/cli.py digest` command
+### Phase 4 — LLM Synthesis (full signals)
+- Extend `Synthesizer` to include TDnet, price anomalies, and news clusters
+- Tune prompt using real digest output as feedback
 
-### Phase 4 — Tuning & Delivery
+### Phase 5 — Tuning & Delivery
 - Let the user annotate past digests ("this was useful", "already knew this", "too noisy")
 - Use annotations to tune the synthesis prompt
 - Optional: email or push notification delivery
