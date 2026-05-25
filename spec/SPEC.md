@@ -1,69 +1,157 @@
-# Potential Elephant
+# Potential Elephant — System Specification
 
-**Status:** Draft / Ideation
-**Goal:** Build a medium-to-long-term investment decision-support system leveraging LLMs and AI-native data protocols (MCP).
-**Target Capital:** Up to 20M JPY.
-**Risk Profile:** Aggressive (targeting high returns, acceptable drawdown up to 25%).
-**Target Markets:** JP Stocks/ETFs, US Stocks/ETFs, FX, Crypto.
+**Status:** Active Development
+**Last updated:** 2026-05-23
 
-## 1. Baseline
-`potential-elephant` is a "Quantamental" advisor that leverages LLMs to automate deep financial research. It focuses on the "why" behind market moves by analyzing official disclosures and news, synthesized with technical indicators.
+---
 
-## 2. User Experience: A Typical Research Session
-The system is designed to be your "Chief Investment Officer" (CIO) inside OpenClaw.
+## 1. Purpose
 
-**Step 1: The Initial Query**
-*   **User:** "Hey Elephant, check the latest earnings for Sony (6758) and give me a medium-term outlook."
-*   **Agent:** 
-    1.  Scans **TDnet** for the most recent earnings release and **EDINET** for the latest quarterly report.
-    2.  Fetches 1 year of daily price data from **Yahoo Finance JP**.
-    3.  Extracts key news headlines from **RSS feeds**.
+Potential Elephant is a **research scout**. It monitors a broad set of financial signals across JP and US markets, then surfaces a short list of "doors" — areas, sectors, stocks, or ETFs worth the user's attention. The user investigates and decides. The system never trades.
 
-**Step 2: The Deep Dive**
-*   **Agent:** "I've analyzed the Q3 report. Revenue is up 8%, but operating margin in the gaming segment is squeezed by R&D costs. Technically, the stock is in a consolidation phase above the 200-day EMA. The 'vibe' on the BBS is cautious but long-term bullish. Should I generate a full comparison with Microsoft and Nintendo?"
-*   **User:** "Yes, and include a risk assessment for my 20M JPY portfolio."
+**The goal is discovery, not prediction.**
 
-**Step 3: The Elephant Report**
-*   **Agent:** Generates a structured Markdown report showing:
-    *   **Recommendation:** Overweight (Accumulate on dips).
-    *   **Catalysts:** New hardware cycle announcement expected in 6 months.
-    *   **Risk:** Yen appreciation could hit overseas revenue.
-    *   **Portfolio Impact:** "Adding 1M JPY here keeps our total drawdown risk at 18%, well within your 25% limit."
+A good output is: *"The semiconductor supply chain is getting unusual TDnet activity this week, and BBS sentiment on three mid-cap names has turned sharply bullish. You probably haven't looked at these."*
 
-**Step 4: Periodic Monitoring**
-*   **Agent (Proactive):** "User, Sony just released a Timely Disclosure about a new partnership. This reinforces our bull case. I suggest moving our stop-loss up by 3%."
+### What it is not
+- Not a trading bot
+- Not a price prediction model
+- Not a backtesting framework
+- Not a portfolio manager
 
-## 3. AI-Native Data Architecture (MCP Priority)
-The system uses the Model Context Protocol (MCP) to bridge LLMs with live financial data, ensuring the analyst agent has direct access to official sources:
-- **Japanese Disclosures:**
-  - **TDnet:** Timely disclosures (earnings, M&A) via `tdnet-disclosure-mcp`.
-  - **EDINET:** Statutory filings (Annual/Quarterly reports) via the official EDINET API and `edinet-mcp`.
-- **Market Data:**
-  - **Yahoo Finance (JP/US):** For OHLCV, FX, and Crypto prices via `yfinance` and `stockprice-mcp`.
-- **News:** RSS feeds (Reuters, NHK, Nikkei) and Google News for macro context.
+---
 
-## 3. Core Research Pillars (Powered by LLM)
-- **Document Analysis:** Automated extraction of metrics and growth narratives from EDINET XBRL/PDF files and TDnet releases.
-- **Narrative Synthesis:** LLMs summarize earnings calls and IR presentations to identify "catalysts" for long-term moves.
-- **Technical Context:** EOD technical signals (Trend, Momentum) provide the "entry/exit" guardrails for the fundamental thesis.
+## 2. Target User Behavior
 
-## 4. Process
-1. **Intelligence Gathering:** Scheduled scanning of TDnet/EDINET for watchlist symbols.
-2. **Deep Analysis:** LLM-driven summary of reports, competitor comparisons, and "Fundamental Strength" scoring.
-3. **Signal Integration:** Combining fundamental outlooks with Yahoo Finance technical indicators.
-4. **Reporting:** Generating the "Elephant Report"—a daily/weekly high-conviction briefing.
-5. **Execution:** Manual review and trade placement (e.g., via SBI).
+- **Holding period:** weeks to months
+- **Research cadence:** check the digest daily or a few times per week
+- **Action:** read the digest → pick 1-3 hints that resonate → do own research → decide to act or not
+- **Markets:** JP stocks/ETFs, US stocks/ETFs
 
-## 5. Development Plan
-- **Phase 1: Ingestion & MCP Setup**
-  - Configure `tdnet-disclosure-mcp` and `edinet-mcp` for local use.
-  - Build Python connectors for Yahoo Finance (US/JP) using `yfinance`.
-  - Implement PDF/XBRL extraction for Japanese reports.
-- **Phase 2: LLM Analyst Implementation**
-  - Develop specialized prompts for analyzing financial statements and news.
-  - Integrate with local LLMs (Ollama) or cloud APIs (Claude/Gemini).
-- **Phase 3: Scoring & Reporting Engine**
-  - Create the algorithm for the "Fundamental + Technical" composite score.
-  - Build the automated "Elephant Report" template.
-- **Phase 4: Experimental Sentiment**
-  - Add Yahoo Finance Japan BBS and social media sentiment as secondary signals.
+---
+
+## 3. The Digest (Core Output)
+
+The primary output is a **Daily Digest** — a short, scannable report generated by an LLM that synthesizes all signals collected in the past 24-48 hours.
+
+### Format
+
+```
+=== Elephant Digest · 2026-05-23 ===
+
+[MACRO THEME]
+US Fed minutes released: hawkish tone. Yen weakened to 158.
+→ Domestic JP exporters may benefit. Consider looking at auto / electronics sector.
+
+[SECTOR OBSERVATION]
+Semiconductor: 4 TDnet earnings revisions upward in past 48h (Renesas, Rohm, +2 smaller).
+BBS discussion volume up 3x on 6723.T (Renesas). Analyst consensus on Minkabu shifted to "strong buy" this week.
+→ Sector may be turning. Worth a look at ETF 1545 (Nikkei Semi ETF) or individual names.
+
+[STOCK HINT]
+4385.T (Mercari): Minkabu analyst consensus flipped neutral→buy in 48h.
+BBS evaluation: strongest+strong went from 40% → 71% over 2 weeks.
+No recent TDnet release — move may be anticipatory.
+→ Worth reading recent IR and news before the next earnings date.
+
+[NEWS ITEM]
+Reuters JP: "Japan to expand chip subsidy program" — 3 articles in 24h clustering around TSMC Kumamoto plant ramp.
+→ Upstream suppliers (photomasks, chemicals) may be underpriced relative to the theme.
+```
+
+### Principles
+- **Short.** 5-8 hints maximum. Quality over coverage.
+- **Source-cited.** Every hint states which signal triggered it.
+- **Opinionated but humble.** "Worth looking at" not "Buy this."
+- **Novel.** If the user already knows it, it's not worth including.
+
+---
+
+## 4. Data Sources (Signals)
+
+| Signal | Source | Cadence | Status |
+|---|---|---|---|
+| BBS hot tickers (volume ranking) | Yahoo Finance JP BBS rank | Daily | ✅ built |
+| BBS sentiment per ticker | Yahoo Finance JP BBS comments + evaluations | Daily | ✅ built |
+| Analyst consensus + target price | Minkabu (analysis, research, pick, consensus pages) | Daily | ✅ built |
+| Timely disclosures (earnings, M&A, revisions) | TDnet | Daily | 🔶 started (`src/ingestion/tdnet.py`) |
+| Price + volume (OHLCV, 52w range, moving averages) | yfinance (JP + US) | Daily | ❌ not built |
+| News clusters | RSS: Nikkei, Reuters JP, NHK Business | Daily | ❌ not built |
+| US macro context | RSS: Reuters, Bloomberg, Fed press releases | As available | ❌ not built |
+
+---
+
+## 5. Processing: LLM Synthesis
+
+Raw data from all sources is fed into a Claude API call that produces the digest.
+
+### Inputs per digest run
+- BBS rank changes (which tickers jumped in discussion volume)
+- Evaluation shifts per ticker (buy/sell ratio moving significantly)
+- Minkabu consensus changes flagged since last run
+- New TDnet disclosures from watchlist + BBS hot tickers
+- Recent news items clustered by ticker/sector keyword
+- Price anomalies (unusual volume, 52w high/low proximity, gap up/down)
+
+### LLM task
+The LLM is asked to:
+1. Find cross-signal correlations (e.g. news + BBS volume + consensus all pointing same direction)
+2. Identify things the user is unlikely to have seen already
+3. Surface sector-level themes, not just individual stocks
+4. Rank by interestingness, output top 5-8 hints
+5. Keep each hint to 3-5 lines
+
+### Watchlist vs. Discovery
+- **Watchlist mode:** dig deeper on tickers the user already follows
+- **Discovery mode:** surface tickers the user is NOT following but which have unusual signals
+
+Both modes run together in the digest.
+
+---
+
+## 6. Development Phases
+
+### Phase 1 — Sentiment Pipeline (Complete)
+- Yahoo Finance JP BBS scraper (comments + evaluations per ticker)
+- Minkabu analyst consensus scraper
+- BBS rank scraper (updates `tickers.txt` with hot tickers daily)
+- Scheduler + Parquet storage
+
+### Phase 2 — Catalyst & Price Data
+- Integrate TDnet into the elephant harvester framework (port `src/ingestion/tdnet.py`)
+- Add yfinance harvester: daily OHLCV, 52-week range, volume vs. average
+- Add RSS news harvester: fetch + deduplicate headlines from Nikkei / Reuters JP / NHK Business
+
+### Phase 3 — LLM Synthesis
+- Build a `Synthesizer` that collects the last 48h of stored signals
+- Call Claude API with a structured prompt to produce the digest
+- Output: markdown report printed to console and saved to `data/digests/YYYY-MM-DD.md`
+- Add `python src/cli.py digest` command
+
+### Phase 4 — Tuning & Delivery
+- Let the user annotate past digests ("this was useful", "already knew this", "too noisy")
+- Use annotations to tune the synthesis prompt
+- Optional: email or push notification delivery
+
+---
+
+## 7. Data Storage
+
+Existing layout is retained:
+
+```
+/panda-infra/elephant/
+  dataset=yahoo_comments/ticker={ticker}/date={date}/data.parquet
+  dataset=yahoo_evaluations/ticker={ticker}/YEAR={year}/data.parquet
+  dataset=minkabu_raw_html/ticker={ticker}/YEAR={year}/data.parquet
+  dataset=tdnet_disclosures/date={date}/data.parquet          # Phase 2
+  dataset=price_daily/ticker={ticker}/YEAR={year}/data.parquet # Phase 2
+  dataset=news_headlines/date={date}/data.parquet              # Phase 2
+  digests/YYYY-MM-DD.md                                        # Phase 3
+```
+
+---
+
+## 8. Low-Level Scraping Reference
+
+Implementation details for the Yahoo Finance BBS scraper (selectors, schema, anti-detection) are documented in [`doc/spec.md`](../doc/spec.md). That document covers Phase 1 internals and should be updated as scraping logic evolves.
