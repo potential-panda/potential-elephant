@@ -14,6 +14,8 @@ from elephant.minkabu.planner import MinkabuPlanner
 from elephant.tickers import get_tickers
 from elephant.yjp.harvester import YahooFinanceHarvester
 from elephant.yjp.planner import YahooFinancePlanner
+from elephant.news.harvester import NewsHarvester
+from elephant.news.planner import NewsPlanner
 from elephant.yjp_bbs_rank.harvester import BbsRankHarvester
 from elephant.yjp_bbs_rank.planner import BbsRankPlanner
 
@@ -43,6 +45,16 @@ async def fetch_cmd(args):
             print("Finished fetching BBS ranking")
         except Exception:
             logging.exception("Failed to fetch BBS ranking")
+        return
+
+    if args.dataset == "news_headlines":
+        try:
+            print("\n--- Fetching news headlines ---")
+            harvester = NewsHarvester(store)
+            await harvester.start({})
+            print("Finished fetching news headlines")
+        except Exception:
+            logging.exception("Failed to fetch news headlines")
         return
 
     selected_tickers = get_tickers(TICKERS_FILE, num=2)
@@ -167,7 +179,7 @@ def main():
     fetch_parser = subparsers.add_parser("fetch", help="Fetch data for 5 random stocks (testing)")
     fetch_parser.add_argument(
         "--dataset",
-        choices=["yahoo_comments", "yahoo_evaluations", "minkabu_raw_html", "yjp_bbs_rank"],
+        choices=["yahoo_comments", "yahoo_evaluations", "minkabu_raw_html", "yjp_bbs_rank", "news_headlines"],
         required=True,
         help="Target dataset to display",
     )
@@ -202,8 +214,9 @@ def main():
         bbs_rank_planner = BbsRankPlanner(store, TICKERS_FILE)
         yjp_planner = YahooFinancePlanner(store, TICKERS_FILE)
         minkabu_planner = MinkabuPlanner(store, TICKERS_FILE)
+        news_planner = NewsPlanner(store)
 
-        multi_planner = MultiPlanner([bbs_rank_planner, yjp_planner, minkabu_planner])
+        multi_planner = MultiPlanner([bbs_rank_planner, yjp_planner, minkabu_planner, news_planner])
         scheduler = Scheduler(multi_planner)
 
         if args.dry_run:
@@ -215,6 +228,8 @@ def main():
                     label = f"{task.harvester.ticker} (YJP)"
                 elif isinstance(task.harvester, MinkabuHarvester):
                     label = f"{task.harvester.ticker} (Minkabu)"
+                elif isinstance(task.harvester, NewsHarvester):
+                    label = "News Headlines (RSS)"
                 else:
                     label = "BBS Rank Update"
                 print(f"{task.scheduled_at.strftime('%H:%M')} - {label}")

@@ -3,6 +3,7 @@ import logging
 import os
 import re
 from datetime import datetime, timedelta
+from typing import Optional
 
 import anthropic
 import pandas as pd
@@ -56,6 +57,30 @@ class Synthesizer:
                 logging.exception(f"Failed to load evaluations for {ticker}")
         return results
 
+    def _load_news(self, since: datetime) -> list[dict]:
+        pattern = os.path.join(self.data_dir, "dataset=news_headlines", "date=*", "data.parquet")
+        files = glob.glob(pattern)
+        if not files:
+            return []
+
+        dfs = []
+        for f in files:
+            try:
+                df = pd.read_parquet(f)
+                df["scraped_at"] = pd.to_datetime(df["scraped_at"])
+                recent = df[df["scraped_at"] >= since]
+                if not recent.empty:
+                    dfs.append(recent)
+            except Exception:
+                logging.exception(f"Failed to load news from {f}")
+
+        if not dfs:
+            return []
+
+        combined = pd.concat(dfs, ignore_index=True).drop_duplicates(subset=["id"])
+        combined = combined.sort_values("scraped_at", ascending=False)
+        return combined.head(60).to_dict("records")
+
     def _load_minkabu(self, tickers: list[str], since: datetime) -> dict[str, str]:
         results = {}
         year = datetime.now().strftime("%Y")
@@ -86,6 +111,7 @@ class Synthesizer:
         tickers: list[str],
         evaluations: dict[str, dict],
         minkabu: dict[str, str],
+        news: Optional[list[dict]] = None,
     ) -> str:
         lines = []
         date_str = datetime.now().strftime("%Y-%m-%d")
@@ -112,6 +138,19 @@ class Synthesizer:
                 lines.append(f"\n### {ticker}")
                 lines.append(text)
 
+        if news:
+            lines.append("")
+            lines.append("## Recent News Headlines (past 48h)")
+            lines.append("Sources: NHK Business, Reuters, Google News (JP economy, semiconductors, AI infrastructure)")
+            lines.append("")
+            for item in news[:50]:
+                source = item.get("source", "")
+                title = item.get("title", "")
+                summary = (item.get("summary") or "")[:200]
+                lines.append(f"- [{source}] {title}")
+                if summary:
+                    lines.append(f"  {summary}")
+
         return "\n".join(lines)
 
     def generate(self) -> str:
@@ -123,7 +162,8 @@ class Synthesizer:
 
         evaluations = self._load_evaluations(tickers, since)
         minkabu = self._load_minkabu(tickers, since)
-        context = self._build_context(tickers, evaluations, minkabu)
+        news = self._load_news(since)
+        context = self._build_context(tickers, evaluations, minkabu, news)
         date_str = datetime.now().strftime("%Y-%m-%d")
 
         system_prompt = f"""\
