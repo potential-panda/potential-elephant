@@ -11,16 +11,19 @@ from qate.util.dt_range import DtRange
 from elephant.framework import HarvesterTask, Planner, Scheduler, Store
 from elephant.minkabu.harvester import MinkabuHarvester
 from elephant.minkabu.planner import MinkabuPlanner
+from elephant.news.harvester import NewsHarvester
+from elephant.news.planner import NewsPlanner
+from elephant.river.discoverer import Discoverer
+from elephant.river.tree import FRAMEWORK_RIVERS, RiverTree
 from elephant.tickers import get_tickers
 from elephant.yjp.harvester import YahooFinanceHarvester
 from elephant.yjp.planner import YahooFinancePlanner
-from elephant.news.harvester import NewsHarvester
-from elephant.news.planner import NewsPlanner
 from elephant.yjp_bbs_rank.harvester import BbsRankHarvester
 from elephant.yjp_bbs_rank.planner import BbsRankPlanner
 
 TICKERS_FILE = "tickers.txt"
 DATA_DIR = "/panda-infra/elephant"
+TREE_PATH = os.path.join(DATA_DIR, "river_tree.json")
 
 
 class MultiPlanner(Planner):
@@ -33,6 +36,8 @@ class MultiPlanner(Planner):
             all_tasks.extend(planner.create())
         return all_tasks
 
+
+# --- fetch ---
 
 async def fetch_cmd(args):
     store = Store(DATA_DIR)
@@ -77,8 +82,9 @@ async def fetch_cmd(args):
             logging.exception(f"Failed to fetch {ticker}")
 
 
+# --- query ---
+
 def query_cmd(args):
-    """Execute a query against the stored datasets."""
     ticker = args.ticker
     if not ticker.endswith(".T"):
         ticker = f"{ticker}.T"
@@ -110,13 +116,10 @@ def query_cmd(args):
             try:
                 dt_range = DtRange.from_strings(args.start, args.end)
                 target_days = dt_range.days
-
-                # Check column for date filtering
                 if args.dataset == "yahoo_comments":
                     df["date_tmp"] = pd.to_datetime(df["scraped_at"]).dt.strftime("%Y-%m-%d")
                     df = df[df["date_tmp"].isin(target_days)]
                 elif args.dataset in ["yahoo_evaluations", "minkabu_raw_html"]:
-                    # Both use YEAR partitioning, but we can filter by exact date using scraped_at
                     df["date_tmp"] = pd.to_datetime(df["scraped_at"]).dt.strftime("%Y-%m-%d")
                     df = df[df["date_tmp"].isin(target_days)]
             except Exception as e:
@@ -126,10 +129,8 @@ def query_cmd(args):
         if "post_datetime" in df.columns:
             df["post_datetime_dt"] = pd.to_datetime(df["post_datetime"])
             df = df.sort_values(by=["post_datetime_dt", "post_id"], ascending=[False, False])
-
         if not args.start and not args.end:
             df = df.head(500)
-
         if not df.empty:
             print(f"\n--- Top {len(df)} comments for {ticker} ---")
             for _, row in df.iterrows():
@@ -152,10 +153,13 @@ def query_cmd(args):
         print(df.head(20))
 
 
+# --- digest ---
+
 def digest_cmd(args):
     from elephant.synthesizer import Synthesizer
 
-    synthesizer = Synthesizer(DATA_DIR, TICKERS_FILE)
+    tree = RiverTree(TREE_PATH)
+    synthesizer = Synthesizer(DATA_DIR, TICKERS_FILE, tree=tree)
     logging.info("Generating digest...")
     digest = synthesizer.generate()
 
@@ -170,35 +174,274 @@ def digest_cmd(args):
     logging.info(f"Digest saved to {output_path}")
 
 
+# --- tree ---
+
+def tree_cmd(args):
+    tree = RiverTree(TREE_PATH)
+
+    if args.tree_cmd == "show":
+        print(tree.to_display(river_id=getattr(args, "river", None)))
+
+    elif args.tree_cmd == "init":
+        existing = {r.id for r in tree.list_rivers()}
+        added = []
+        for r in FRAMEWORK_RIVERS:
+            if r["id"] not in existing:
+                tree.add_river(r["id"], r["name"], r.get("description", ""))
+                added.append(r["name"])
+        if added:
+            print(f"Initialised river tree with: {', '.join(added)}")
+        else:
+            print("River tree already initialised.")
+        print(tree.to_display())
+
+    elif args.tree_cmd == "river-add":
+        try:
+            tree.add_river(args.id, args.name, getattr(args, "description", "") or "")
+            print(f"Added river: [{args.id}] {args.name}")
+        except ValueError as e:
+            print(f"Error: {e}")
+
+    elif args.tree_cmd == "river-remove":
+        if tree.remove_river(args.id):
+            print(f"Removed river: {args.id}")
+        else:
+            print(f"River not found: {args.id}")
+
+    elif args.tree_cmd == "node-add":
+        try:
+            node = tree.add_node(
+                river_id=args.river,
+                ticker=args.ticker,
+                layer=args.layer,
+                name=getattr(args, "name", "") or "",
+                market=getattr(args, "market", "US") or "US",
+                role=getattr(args, "role", "") or "",
+                notes=getattr(args, "notes", "") or "",
+            )
+            print(f"Added node: {node.ticker} [{node.layer}] to river '{args.river}'")
+        except ValueError as e:
+            print(f"Error: {e}")
+
+    elif args.tree_cmd == "node-update":
+        kwargs = {
+            k: v for k, v in vars(args).items()
+            if k in ("layer", "name", "market", "role", "notes") and v is not None
+        }
+        if tree.update_node(args.river, args.ticker, **kwargs):
+            print(f"Updated {args.ticker} in river '{args.river}'")
+        else:
+            print(f"Node not found: {args.ticker} in river '{args.river}'")
+
+    elif args.tree_cmd == "node-remove":
+        if tree.remove_node(args.river, args.ticker):
+            print(f"Removed {args.ticker} from river '{args.river}'")
+        else:
+            print(f"Node not found: {args.ticker} in river '{args.river}'")
+
+    elif args.tree_cmd == "news-add":
+        tree.add_news(
+            ticker=args.ticker,
+            title=args.title,
+            url=args.url,
+            source=args.source,
+            date=getattr(args, "date", None),
+        )
+        print(f"Added news for {args.ticker}: {args.title[:60]}")
+
+    else:
+        print("Unknown tree command. Use: show, init, river-add, river-remove, node-add, node-update, node-remove, news-add")
+
+
+# --- discover ---
+
+def discover_cmd(args):
+    tree = RiverTree(TREE_PATH)
+    discoverer = Discoverer(DATA_DIR, TICKERS_FILE, tree)
+
+    if args.ticker:
+        # Classify a specific ticker
+        print(f"Classifying {args.ticker}...")
+        result = discoverer.classify_ticker(args.ticker)
+        _print_suggestion(result)
+        if result and args.auto and result.get("fits_existing_river") and result.get("confidence") in ("high", "medium"):
+            _auto_add(tree, result)
+
+    elif args.keyword:
+        # Keyword search → extract tickers → classify
+        print(f"Searching for tickers related to: '{args.keyword}'...")
+        results = discoverer.classify_keyword(args.keyword)
+        for result in results:
+            _print_suggestion(result)
+            if args.auto and result.get("fits_existing_river") and result.get("confidence") in ("high", "medium"):
+                _auto_add(tree, result)
+
+    else:
+        # Autonomous scan of BBS unknowns
+        print("Scanning BBS hot tickers not yet in the river tree...")
+        suggestions = discoverer.scan_unknown_tickers()
+        if not suggestions:
+            print("No high-confidence suggestions found.")
+            return
+        for result in suggestions:
+            _print_suggestion(result)
+            if args.auto and result.get("fits_existing_river") and result.get("confidence") in ("high", "medium"):
+                _auto_add(tree, result)
+            elif not args.auto:
+                answer = input("Add to tree? [y/n/skip] ").strip().lower()
+                if answer == "y":
+                    _auto_add(tree, result)
+
+
+def _print_suggestion(result: dict) -> None:
+    if not result:
+        print("(no classification returned)")
+        return
+    confidence = result.get("confidence", "?")
+    fits = result.get("fits_existing_river", False)
+    print(f"\n[SUGGESTION — {confidence} confidence]")
+    print(f"Ticker:  {result.get('ticker')} ({result.get('market', '?')})")
+    if fits:
+        print(f"River:   {result.get('river_id')}")
+        print(f"Layer:   {result.get('layer')}")
+    else:
+        new_river = result.get("new_river_name")
+        print(f"River:   (new river suggested: {new_river})" if new_river else "River:   (does not fit any known river)")
+    print(f"Name:    {result.get('name', '')}")
+    print(f"Role:    {result.get('role', '')}")
+    print(f"Reason:  {result.get('reasoning', '')}")
+
+
+def _auto_add(tree: RiverTree, result: dict) -> None:
+    try:
+        node = tree.add_node(
+            river_id=result["river_id"],
+            ticker=result["ticker"],
+            layer=result["layer"],
+            name=result.get("name", ""),
+            market=result.get("market", "US"),
+            role=result.get("role", ""),
+            source="discovery",
+        )
+        print(f"  -> Added {node.ticker} [{node.layer}] to river '{result['river_id']}'")
+    except ValueError as e:
+        print(f"  -> Could not add: {e}")
+
+
+# --- schedule ---
+
+def schedule_cmd(args):
+    store = Store(DATA_DIR)
+
+    bbs_rank_planner = BbsRankPlanner(store, TICKERS_FILE)
+    yjp_planner = YahooFinancePlanner(store, TICKERS_FILE)
+    minkabu_planner = MinkabuPlanner(store, TICKERS_FILE)
+    news_planner = NewsPlanner(store)
+
+    multi_planner = MultiPlanner([bbs_rank_planner, yjp_planner, minkabu_planner, news_planner])
+    scheduler = Scheduler(multi_planner)
+
+    if args.dry_run:
+        tasks = multi_planner.create()
+        print("--- Daily Execution Plan (Dry Run) ---")
+        tasks.sort(key=lambda x: x.scheduled_at)
+        for task in tasks:
+            if isinstance(task.harvester, YahooFinanceHarvester):
+                label = f"{task.harvester.ticker} (YJP)"
+            elif isinstance(task.harvester, MinkabuHarvester):
+                label = f"{task.harvester.ticker} (Minkabu)"
+            elif isinstance(task.harvester, NewsHarvester):
+                label = "News Headlines (RSS)"
+            else:
+                label = "BBS Rank Update"
+            print(f"{task.scheduled_at.strftime('%H:%M')} - {label}")
+        print(f"Total tasks: {len(tasks)}")
+    else:
+        scheduler.start()
+
+
+# --- main ---
+
 def main():
     logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
-    parser = argparse.ArgumentParser(description="Yahoo Japan Finance BBS Scraper CLI")
+    parser = argparse.ArgumentParser(description="Potential Elephant CLI")
     subparsers = parser.add_subparsers(dest="command", help="Available commands")
 
-    # Fetch command
-    fetch_parser = subparsers.add_parser("fetch", help="Fetch data for 5 random stocks (testing)")
+    # fetch
+    fetch_parser = subparsers.add_parser("fetch", help="Fetch data for testing")
     fetch_parser.add_argument(
         "--dataset",
         choices=["yahoo_comments", "yahoo_evaluations", "minkabu_raw_html", "yjp_bbs_rank", "news_headlines"],
         required=True,
-        help="Target dataset to display",
     )
 
-    # Schedule command
-    schedule_parser = subparsers.add_parser("schedule", help="Schedule or dry-run daily scraping")
-    schedule_parser.add_argument("--dry-run", action="store_true", help="Print the plan and exit")
-
-    # Query command
-    query_parser = subparsers.add_parser("query", help="Query the stored dataset")
+    # query
+    query_parser = subparsers.add_parser("query", help="Query stored dataset")
     query_parser.add_argument(
         "--dataset", choices=["yahoo_comments", "yahoo_evaluations", "minkabu_raw_html"], required=True
     )
     query_parser.add_argument("--ticker", required=True)
-    query_parser.add_argument("--start", help="Start date (YYYY-MM-DD or YYYYMMDD)")
-    query_parser.add_argument("--end", help="End date (YYYY-MM-DD or YYYYMMDD)")
+    query_parser.add_argument("--start")
+    query_parser.add_argument("--end")
 
-    # Digest command
-    subparsers.add_parser("digest", help="Generate a daily research digest using LLM synthesis")
+    # digest
+    subparsers.add_parser("digest", help="Generate daily research digest")
+
+    # schedule
+    schedule_parser = subparsers.add_parser("schedule", help="Run or dry-run the daily scraping scheduler")
+    schedule_parser.add_argument("--dry-run", action="store_true")
+
+    # tree
+    tree_parser = subparsers.add_parser("tree", help="Manage the river tree knowledge database")
+    tree_subs = tree_parser.add_subparsers(dest="tree_cmd")
+
+    tree_show = tree_subs.add_parser("show", help="Display the tree")
+    tree_show.add_argument("--river", help="Show a specific river by id")
+
+    tree_subs.add_parser("init", help="Seed the tree with the 4 framework rivers")
+
+    river_add = tree_subs.add_parser("river-add", help="Add a new river")
+    river_add.add_argument("--id", required=True)
+    river_add.add_argument("--name", required=True)
+    river_add.add_argument("--description", default="")
+
+    river_rm = tree_subs.add_parser("river-remove", help="Remove a river")
+    river_rm.add_argument("--id", required=True)
+
+    node_add = tree_subs.add_parser("node-add", help="Add a node to a river")
+    node_add.add_argument("--river", required=True)
+    node_add.add_argument("--ticker", required=True)
+    node_add.add_argument("--layer", required=True, choices=["source", "upper", "middle", "lower"])
+    node_add.add_argument("--name", default="")
+    node_add.add_argument("--market", default="US", choices=["US", "JP"])
+    node_add.add_argument("--role", default="")
+    node_add.add_argument("--notes", default="")
+
+    node_upd = tree_subs.add_parser("node-update", help="Update a node")
+    node_upd.add_argument("--river", required=True)
+    node_upd.add_argument("--ticker", required=True)
+    node_upd.add_argument("--layer", choices=["source", "upper", "middle", "lower"])
+    node_upd.add_argument("--name")
+    node_upd.add_argument("--market", choices=["US", "JP"])
+    node_upd.add_argument("--role")
+    node_upd.add_argument("--notes")
+
+    node_rm = tree_subs.add_parser("node-remove", help="Remove a node")
+    node_rm.add_argument("--river", required=True)
+    node_rm.add_argument("--ticker", required=True)
+
+    news_add = tree_subs.add_parser("news-add", help="Tag a news item to a ticker")
+    news_add.add_argument("--ticker", required=True)
+    news_add.add_argument("--title", required=True)
+    news_add.add_argument("--url", required=True)
+    news_add.add_argument("--source", required=True)
+    news_add.add_argument("--date")
+
+    # discover
+    discover_parser = subparsers.add_parser("discover", help="Discover and classify tickers into the river tree")
+    discover_parser.add_argument("--ticker", help="Classify a specific ticker")
+    discover_parser.add_argument("--keyword", help="Search news for keyword and classify found tickers")
+    discover_parser.add_argument("--auto", action="store_true", help="Auto-add high-confidence suggestions")
 
     args = parser.parse_args()
 
@@ -209,33 +452,11 @@ def main():
     elif args.command == "digest":
         digest_cmd(args)
     elif args.command == "schedule":
-        store = Store(DATA_DIR)
-
-        bbs_rank_planner = BbsRankPlanner(store, TICKERS_FILE)
-        yjp_planner = YahooFinancePlanner(store, TICKERS_FILE)
-        minkabu_planner = MinkabuPlanner(store, TICKERS_FILE)
-        news_planner = NewsPlanner(store)
-
-        multi_planner = MultiPlanner([bbs_rank_planner, yjp_planner, minkabu_planner, news_planner])
-        scheduler = Scheduler(multi_planner)
-
-        if args.dry_run:
-            tasks = multi_planner.create()
-            print("--- Daily Execution Plan (Dry Run) ---")
-            tasks.sort(key=lambda x: x.scheduled_at)
-            for task in tasks:
-                if isinstance(task.harvester, YahooFinanceHarvester):
-                    label = f"{task.harvester.ticker} (YJP)"
-                elif isinstance(task.harvester, MinkabuHarvester):
-                    label = f"{task.harvester.ticker} (Minkabu)"
-                elif isinstance(task.harvester, NewsHarvester):
-                    label = "News Headlines (RSS)"
-                else:
-                    label = "BBS Rank Update"
-                print(f"{task.scheduled_at.strftime('%H:%M')} - {label}")
-            print(f"Total tasks: {len(tasks)}")
-        else:
-            scheduler.start()
+        schedule_cmd(args)
+    elif args.command == "tree":
+        tree_cmd(args)
+    elif args.command == "discover":
+        discover_cmd(args)
     else:
         parser.print_help()
 

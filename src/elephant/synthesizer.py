@@ -8,6 +8,8 @@ from typing import Optional
 import anthropic
 import pandas as pd
 
+from elephant.river.tree import LAYER_LABELS, LAYERS, RiverTree
+
 
 def _strip_html(html: str) -> str:
     if not html:
@@ -18,9 +20,10 @@ def _strip_html(html: str) -> str:
 
 
 class Synthesizer:
-    def __init__(self, data_dir: str, tickers_file: str):
+    def __init__(self, data_dir: str, tickers_file: str, tree: Optional[RiverTree] = None):
         self.data_dir = data_dir
         self.tickers_file = tickers_file
+        self.tree = tree
         self.client = anthropic.Anthropic()
 
     def _load_tickers(self) -> list[str]:
@@ -151,6 +154,22 @@ class Synthesizer:
                 if summary:
                     lines.append(f"  {summary}")
 
+        if self.tree:
+            lines.append("")
+            lines.append("## Current River Tree (known instruments)")
+            lines.append("Use this to avoid suggesting already-mapped tickers and to identify thin/empty layers.")
+            for river in self.tree.list_rivers():
+                by_layer = {layer: [] for layer in LAYERS}
+                for node in river.nodes:
+                    if node.layer in by_layer:
+                        by_layer[node.layer].append(node.ticker)
+                layer_parts = []
+                for layer in LAYERS:
+                    tickers = by_layer[layer]
+                    status = ", ".join(tickers) if tickers else "(empty)"
+                    layer_parts.append(f"{layer}: {status}")
+                lines.append(f"  {river.name}: {' | '.join(layer_parts)}")
+
         return "\n".join(lines)
 
     def generate(self) -> str:
@@ -166,6 +185,14 @@ class Synthesizer:
         context = self._build_context(tickers, evaluations, minkabu, news)
         date_str = datetime.now().strftime("%Y-%m-%d")
 
+        river_context = ""
+        if self.tree and self.tree.list_rivers():
+            river_context = "\n\nThe investor uses a Thematic Supply Chain River framework with 4 layers:\n"
+            river_context += "  source → upper → middle (highest alpha, 2-3x) → lower\n"
+            river_context += "Known rivers: " + ", ".join(r.name for r in self.tree.list_rivers())
+            river_context += "\nThe Current River Tree section in the data shows what is already mapped. "
+            river_context += "Prioritize finding instruments for empty or thin layers."
+
         system_prompt = f"""\
 You are a financial research scout writing a Daily Digest for a self-directed investor.
 
@@ -174,22 +201,22 @@ things they wouldn't have searched for because they didn't know they existed. \
 They discovered stocks like NBIS and CLSK by browsing Yahoo Finance Japan BBS. \
 That's the kind of discovery you're enabling.
 
-The investor holds positions for weeks to months and does their own research after reading the digest.
+The investor holds positions for weeks to months and does their own research after reading the digest.{river_context}
 
 ## Digest format
 
 Start with: === Elephant Digest · {date_str} ===
 
 Then 5 to 8 hints using these types:
-- [NEW NAME]: a ticker the investor likely doesn't know, with unusual BBS activity or strong bull sentiment
+- [NEW NAME]: a ticker not yet in the river tree, with unusual BBS activity or strong bull sentiment
+- [RIVER GAP]: a layer in a known river that is empty or thin — suggest what type of instrument to look for
 - [HOLDING SIGNAL]: sentiment staying strong despite a price drop — worth revisiting the thesis
 - [SECTOR THEME]: multiple tickers in the same sector showing similar signals
 - [MACRO OBSERVATION]: a macro or currency angle worth watching
 
 Each hint: 3 to 5 lines. End with "→ Worth looking at..." or "→ Worth checking..."
 State which signal triggered each hint (BBS rank position, bull ratio, Minkabu consensus, etc.)
-Prioritize names the investor likely doesn't follow yet.
-If a ticker is a small or mid-cap that rarely gets attention, flag that.
+Do not suggest tickers already in the river tree unless it is a holding signal.
 Language: opinionated but humble. "Worth looking at" not "Buy this."\
 """
 
