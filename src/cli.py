@@ -14,6 +14,7 @@ from elephant.minkabu.planner import MinkabuPlanner
 from elephant.news.harvester import NewsHarvester
 from elephant.news.planner import NewsPlanner
 from elephant.river.discoverer import Discoverer
+from elephant.river.seed import SEED_NODES
 from elephant.river.tree import FRAMEWORK_RIVERS, RiverTree
 from elephant.tickers import get_tickers
 from elephant.yjp.harvester import YahooFinanceHarvester
@@ -183,16 +184,39 @@ def tree_cmd(args):
         print(tree.to_display(river_id=getattr(args, "river", None)))
 
     elif args.tree_cmd == "init":
-        existing = {r.id for r in tree.list_rivers()}
-        added = []
+        existing_rivers = {r.id for r in tree.list_rivers()}
+        added_rivers, added_nodes = [], []
+
         for r in FRAMEWORK_RIVERS:
-            if r["id"] not in existing:
+            if r["id"] not in existing_rivers:
                 tree.add_river(r["id"], r["name"], r.get("description", ""))
-                added.append(r["name"])
-        if added:
-            print(f"Initialised river tree with: {', '.join(added)}")
-        else:
-            print("River tree already initialised.")
+                added_rivers.append(r["name"])
+
+            # Populate nodes from seed data
+            river_obj = tree.get_river(r["id"])
+            existing_tickers = {n.ticker for n in (river_obj.nodes if river_obj else [])}
+            for node in SEED_NODES.get(r["id"], []):
+                if node["ticker"] not in existing_tickers:
+                    try:
+                        tree.add_node(
+                            river_id=r["id"],
+                            ticker=node["ticker"],
+                            layer=node["layer"],
+                            name=node.get("name", ""),
+                            market=node.get("market", "US"),
+                            role=node.get("role", ""),
+                            source="seed",
+                        )
+                        added_nodes.append(f"{node['ticker']} ({r['id']})")
+                    except ValueError:
+                        pass  # already exists
+
+        if added_rivers:
+            print(f"Added rivers: {', '.join(added_rivers)}")
+        if added_nodes:
+            print(f"Added {len(added_nodes)} nodes from V1 ticker matrix")
+        if not added_rivers and not added_nodes:
+            print("River tree already up to date.")
         print(tree.to_display())
 
     elif args.tree_cmd == "river-add":
