@@ -5,10 +5,17 @@ import re
 from datetime import datetime, timedelta
 from typing import Optional
 
-import anthropic
 import pandas as pd
 
 from elephant.river.tree import LAYER_LABELS, LAYERS, RiverTree
+
+# LLM_PROVIDER: "anthropic" (default) or "openai"
+# LLM_MODEL: override the default model for the chosen provider
+LLM_PROVIDER = os.environ.get("LLM_PROVIDER", "anthropic").lower()
+LLM_MODEL = os.environ.get("LLM_MODEL", "")
+
+_ANTHROPIC_DEFAULT = "claude-sonnet-4-6"
+_OPENAI_DEFAULT = "gpt-4o"
 
 
 def _strip_html(html: str) -> str:
@@ -19,12 +26,21 @@ def _strip_html(html: str) -> str:
     return text
 
 
+def _make_client():
+    if LLM_PROVIDER == "openai":
+        import openai
+        return openai.OpenAI()
+    import anthropic
+    return anthropic.Anthropic()
+
+
 class Synthesizer:
     def __init__(self, data_dir: str, tickers_file: str, tree: Optional[RiverTree] = None):
         self.data_dir = data_dir
         self.tickers_file = tickers_file
         self.tree = tree
-        self.client = anthropic.Anthropic()
+        self.client = _make_client()
+        self.provider = LLM_PROVIDER
 
     def _load_tickers(self) -> list[str]:
         if not os.path.exists(self.tickers_file):
@@ -220,11 +236,23 @@ Do not suggest tickers already in the river tree unless it is a holding signal.
 Language: opinionated but humble. "Worth looking at" not "Buy this."\
 """
 
-        response = self.client.messages.create(
-            model="claude-sonnet-4-6",
-            max_tokens=1500,
-            system=[{"type": "text", "text": system_prompt, "cache_control": {"type": "ephemeral"}}],
-            messages=[{"role": "user", "content": context}],
-        )
-
-        return response.content[0].text
+        if self.provider == "openai":
+            model = LLM_MODEL or _OPENAI_DEFAULT
+            response = self.client.chat.completions.create(
+                model=model,
+                max_tokens=1500,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": context},
+                ],
+            )
+            return response.choices[0].message.content
+        else:
+            model = LLM_MODEL or _ANTHROPIC_DEFAULT
+            response = self.client.messages.create(
+                model=model,
+                max_tokens=1500,
+                system=[{"type": "text", "text": system_prompt, "cache_control": {"type": "ephemeral"}}],
+                messages=[{"role": "user", "content": context}],
+            )
+            return response.content[0].text

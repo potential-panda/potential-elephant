@@ -6,10 +6,10 @@ import os
 import re
 from datetime import datetime, timedelta
 
-import anthropic
 import pandas as pd
 
 from elephant.river.tree import LAYERS, RiverTree
+from elephant.synthesizer import LLM_MODEL, LLM_PROVIDER, _ANTHROPIC_DEFAULT, _OPENAI_DEFAULT, _make_client
 
 
 class Discoverer:
@@ -17,7 +17,26 @@ class Discoverer:
         self.data_dir = data_dir
         self.tickers_file = tickers_file
         self.tree = tree
-        self.client = anthropic.Anthropic()
+        self.client = _make_client()
+        self.provider = LLM_PROVIDER
+
+    def _llm(self, prompt: str, max_tokens: int = 600) -> str:
+        if self.provider == "openai":
+            model = LLM_MODEL or _OPENAI_DEFAULT
+            response = self.client.chat.completions.create(
+                model=model,
+                max_tokens=max_tokens,
+                messages=[{"role": "user", "content": prompt}],
+            )
+            return response.choices[0].message.content
+        else:
+            model = LLM_MODEL or _ANTHROPIC_DEFAULT
+            response = self.client.messages.create(
+                model=model,
+                max_tokens=max_tokens,
+                messages=[{"role": "user", "content": prompt}],
+            )
+            return response.content[0].text
 
     # --- Signal loading ---
 
@@ -133,13 +152,7 @@ Respond ONLY with valid JSON, no other text:
   "reasoning": "<2-3 sentences explaining the classification>"
 }}"""
 
-        response = self.client.messages.create(
-            model="claude-sonnet-4-6",
-            max_tokens=600,
-            messages=[{"role": "user", "content": prompt}],
-        )
-
-        raw = response.content[0].text
+        raw = self._llm(prompt, max_tokens=600)
         try:
             start, end = raw.find("{"), raw.rfind("}") + 1
             return json.loads(raw[start:end])
@@ -170,12 +183,7 @@ If none, return [].
 Headlines:
 {chr(10).join(headlines)}"""
 
-        response = self.client.messages.create(
-            model="claude-sonnet-4-6",
-            max_tokens=200,
-            messages=[{"role": "user", "content": extract_prompt}],
-        )
-        raw = response.content[0].text
+        raw = self._llm(extract_prompt, max_tokens=200)
         try:
             start, end = raw.find("["), raw.rfind("]") + 1
             tickers = json.loads(raw[start:end])
