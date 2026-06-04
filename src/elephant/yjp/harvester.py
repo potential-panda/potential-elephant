@@ -67,8 +67,10 @@ class YahooFinanceHarvester(Harvester):
 
         try:
             await page.goto(url, wait_until="domcontentloaded", timeout=60000)
+            # Use class*= attribute selectors — stable across CSS module hash changes
             await page.wait_for_selector(
-                "._EvaluationGraph__graph_xyp4h_72, ._InfiniteBbsList__item_1aetx_12", timeout=30000
+                "[class*='_EvaluationGraph__graph_'], [class*='_InfiniteBbsList__item_']",
+                timeout=30000,
             )
             return True
         except Exception as e:
@@ -103,8 +105,8 @@ class YahooFinanceHarvester(Harvester):
             stop_scrolling = False
 
             if await self._get_page_content(page, url):
-                # Extract Evaluation
-                eval_container = await page.query_selector("._EvaluationGraph__graph_xyp4h_72")
+                # Extract Evaluation — use class*= to survive CSS module hash changes
+                eval_container = await page.query_selector("[class*='_EvaluationGraph__graph_']")
                 if eval_container:
                     spans = await eval_container.query_selector_all("span")
                     for span in spans:
@@ -114,7 +116,7 @@ class YahooFinanceHarvester(Harvester):
                         rate = float(width_match.group(1)) if width_match else 0.0
                         eval_type = None
                         for t in ["strongest", "strong", "both", "weak", "weakest"]:
-                            if f"--{t}_" in (cls or ""):
+                            if f"--{t}" in (cls or ""):
                                 eval_type = t
                                 break
                         if eval_type:
@@ -128,14 +130,14 @@ class YahooFinanceHarvester(Harvester):
                 # Extract Comments
                 current_page = 1
                 while current_page <= max_pages and len(all_comments) < max_comments and not stop_scrolling:
-                    comment_elements = await page.query_selector_all("li._InfiniteBbsList__item_1aetx_12")
+                    comment_elements = await page.query_selector_all("[class*='_InfiniteBbsList__item_']:not([class*='--infeed'])")
                     existing_ids = {c["post_id"] for c in all_comments}
 
                     new_found = 0
                     for el in comment_elements:
                         if len(all_comments) >= max_comments:
                             break
-                        post_id_el = await el.query_selector("a._BbsItem__commentNo_qgr82_41")
+                        post_id_el = await el.query_selector("a[href*='/forum/'][class*='_BbsItem__commentNo_']")
                         post_id = self._extract_post_id(await post_id_el.get_attribute("href")) if post_id_el else None
 
                         if post_id:
@@ -146,13 +148,13 @@ class YahooFinanceHarvester(Harvester):
                                 break
 
                             if post_id not in existing_ids:
-                                time_el = await el.query_selector("time._BbsItem__postDate_qgr82_37")
+                                time_el = await el.query_selector("time[class*='_BbsItem__postDate_']")
                                 post_datetime_str = await time_el.inner_text() if time_el else None
-                                author_el = await el.query_selector("a._BbsItem__userName_qgr82_34")
+                                author_el = await el.query_selector("a[href*='?user='][class*='_BbsItem__userName_']")
                                 author = (
                                     self._extract_user_id(await author_el.get_attribute("href")) if author_el else None
                                 )
-                                body_el = await el.query_selector("div._BbsItem__body_qgr82_84")
+                                body_el = await el.query_selector("div[class*='_BbsItem__body_']")
                                 body = await body_el.inner_text() if body_el else None
 
                                 all_comments.append(
@@ -173,7 +175,7 @@ class YahooFinanceHarvester(Harvester):
                     if stop_scrolling:
                         break
 
-                    bbs_item_selector = "document.querySelectorAll('li._InfiniteBbsList__item_1aetx_12')"
+                    bbs_item_selector = "document.querySelectorAll('[class*=\"_InfiniteBbsList__item_\"]')"
                     current_page += 1
                     if current_page <= max_pages and len(all_comments) < max_comments:
                         await page.evaluate("window.scrollTo(0, document.body.scrollHeight)")

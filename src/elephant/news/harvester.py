@@ -12,10 +12,8 @@ from elephant.framework import Harvester, HarvesterResult, Store
 RSS_FEEDS = [
     # NHK Business/Economy — reliable public JP broadcaster
     {"source": "nhk_business", "url": "https://www.nhk.or.jp/rss/news/cat4.xml", "lang": "ja"},
-    # Reuters global business and tech — macro and sector context
-    {"source": "reuters_business", "url": "https://feeds.reuters.com/reuters/businessNews", "lang": "en"},
-    {"source": "reuters_tech", "url": "https://feeds.reuters.com/reuters/technologyNews", "lang": "en"},
     # Google News RSS — topic-scoped, broad coverage
+    # (Reuters public RSS feeds were discontinued)
     {
         "source": "gnews_jp_economy",
         "url": "https://news.google.com/rss/search?q=japan+economy+stock+market&hl=en&gl=JP&ceid=JP:en",
@@ -29,6 +27,21 @@ RSS_FEEDS = [
     {
         "source": "gnews_ai_infra",
         "url": "https://news.google.com/rss/search?q=AI+infrastructure+investment+data+center&hl=en&gl=US&ceid=US:en",
+        "lang": "en",
+    },
+    {
+        "source": "gnews_robotics",
+        "url": "https://news.google.com/rss/search?q=robotics+humanoid+automation+japan&hl=en&gl=JP&ceid=JP:en",
+        "lang": "en",
+    },
+    {
+        "source": "gnews_biotech_jp",
+        "url": "https://news.google.com/rss/search?q=japan+pharma+biotech+longevity&hl=en&gl=JP&ceid=JP:en",
+        "lang": "en",
+    },
+    {
+        "source": "gnews_power_grid",
+        "url": "https://news.google.com/rss/search?q=power+grid+nuclear+data+center+energy&hl=en&gl=US&ceid=US:en",
         "lang": "en",
     },
 ]
