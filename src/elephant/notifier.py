@@ -68,7 +68,8 @@ def send(digest: str) -> None:
     token, channel_id = _load_discord_config()
     if token and channel_id:
         try:
-            asyncio.run(_send_discord(token, channel_id, digest))
+            from elephant.formatter import to_markdown
+            asyncio.run(_send_discord(token, channel_id, to_markdown(digest)))
             print("Digest sent to Discord.")
         except Exception:
             logging.exception("Failed to send digest to Discord")

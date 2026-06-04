@@ -172,10 +172,17 @@ def digest_cmd(args):
     digests_dir = os.path.join(DATA_DIR, "digests")
     os.makedirs(digests_dir, exist_ok=True)
     date_str = datetime.now().strftime("%Y-%m-%d")
+
     output_path = os.path.join(digests_dir, f"{date_str}.md")
     with open(output_path, "w", encoding="utf-8") as f:
         f.write(digest)
     logging.info(f"Digest saved to {output_path}")
+
+    from elephant.formatter import to_html
+    html_path = os.path.join(digests_dir, f"{date_str}.html")
+    with open(html_path, "w", encoding="utf-8") as f:
+        f.write(to_html(digest))
+    logging.info(f"HTML digest saved to {html_path}")
 
     from elephant.notifier import send as notify
     notify(digest)
