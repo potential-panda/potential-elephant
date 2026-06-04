@@ -5,6 +5,9 @@ import os
 from datetime import datetime
 from typing import List
 
+import elephant.secrets as _secrets
+_secrets.load()
+
 import pandas as pd
 from qate.util.dt_range import DtRange
 
