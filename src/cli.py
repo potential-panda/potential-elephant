@@ -177,6 +177,9 @@ def digest_cmd(args):
         f.write(digest)
     logging.info(f"Digest saved to {output_path}")
 
+    from elephant.notifier import send as notify
+    notify(digest)
+
 
 # --- tree ---
 
