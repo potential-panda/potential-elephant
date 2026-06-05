@@ -188,6 +188,37 @@ def digest_cmd(args):
     notify(digest)
 
 
+# --- dive ---
+
+def dive_cmd(args):
+    from elephant.diver import Diver
+    from elephant.formatter import to_html
+
+    ticker = args.ticker
+    tree = RiverTree(TREE_PATH)
+    diver = Diver(DATA_DIR, tree=tree)
+
+    logging.info(f"Diving into {ticker}...")
+    brief = diver.dive(ticker)
+
+    print("\n" + brief)
+
+    dives_dir = os.path.join(DATA_DIR, "dives")
+    os.makedirs(dives_dir, exist_ok=True)
+    date_str = datetime.now().strftime("%Y-%m-%d")
+    slug = ticker.replace(".", "_")
+
+    md_path = os.path.join(dives_dir, f"{date_str}-{slug}.md")
+    with open(md_path, "w", encoding="utf-8") as f:
+        f.write(brief)
+
+    html_path = os.path.join(dives_dir, f"{date_str}-{slug}.html")
+    with open(html_path, "w", encoding="utf-8") as f:
+        f.write(to_html(brief))
+
+    logging.info(f"Dive saved to {md_path}")
+
+
 # --- tree ---
 
 def tree_cmd(args):
@@ -480,6 +511,9 @@ def main():
     discover_parser.add_argument("--keyword", help="Search news for keyword and classify found tickers")
     discover_parser.add_argument("--auto", action="store_true", help="Auto-add high-confidence suggestions")
 
+    dive_parser = subparsers.add_parser("dive", help="Deep dive research brief on a single ticker")
+    dive_parser.add_argument("--ticker", required=True, help="Ticker to deep dive (e.g. 8105.T or NVDA)")
+
     args = parser.parse_args()
 
     if args.command == "fetch":
@@ -494,6 +528,8 @@ def main():
         tree_cmd(args)
     elif args.command == "discover":
         discover_cmd(args)
+    elif args.command == "dive":
+        dive_cmd(args)
     else:
         parser.print_help()
 

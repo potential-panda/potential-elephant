@@ -132,6 +132,18 @@ python src/cli.py discover --auto
 python src/cli.py discover --ticker NBIS --auto
 ```
 
+### Deep Dive
+
+```bash
+# Full research brief on a single ticker
+python src/cli.py dive --ticker 8105.T
+python src/cli.py dive --ticker NVDA
+```
+
+Produces a structured brief with: company overview, BBS sentiment trend, Minkabu consensus,
+price context (yfinance), news mentions, river fit assessment, and a verdict.
+Saved to `$DATA_DIR/dives/YYYY-MM-DD-{ticker}.md` (and `.html` with clickable links).
+
 ### Query Stored Data
 
 ```bash
@@ -203,9 +215,9 @@ All datasets are Parquet files, partitioned for fast date-range queries.
 | Daily Digest (LLM) | ✅ done | `digest` command via Claude API |
 | River Tree | ✅ done | Knowledge database with CRUD CLI |
 | Discovery Engine | ✅ done | `discover` command, autonomous + targeted |
-| Deep Dive | ⬜ next | `dive --ticker X` — full research brief on demand |
-| TDnet integration | ⬜ | JP timely disclosures (earnings, M&A) |
-| Price / volume data | ⬜ | yfinance OHLCV, 52-week range, volume anomalies |
+| Deep Dive | ✅ done | `dive --ticker X` — full research brief on demand |
+| Price / volume data | ✅ done | yfinance OHLCV, 52-week range, volume anomalies (used in dive) |
+| TDnet integration | ⬜ next | JP timely disclosures (earnings, M&A) |
 
 ---
 
