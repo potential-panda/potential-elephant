@@ -21,6 +21,7 @@ _US_SKIP = {
     "IN", "AT", "LLC", "LTD", "INC", "CO", "NO", "SO", "API",
     "RSS", "CEO", "IPO", "GDP", "BOJ", "FED", "EUV", "GPU", "DRAM",
     "HBM", "URL", "ID", "VC", "PE", "PB", "ROE", "ROA",
+    "JPY", "USD", "EUR", "GBP", "CNY", "KRW",
     "WORTH", "LOOKING", "CHECKING", "MULTIPLE", "RECENT", "STRONG",
 }
 
