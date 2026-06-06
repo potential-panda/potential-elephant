@@ -144,55 +144,47 @@ class Synthesizer:
                 logging.exception(f"Failed to load Minkabu data for {ticker}")
         return results
 
-    def _build_context(
+    def _build_jp_context(
         self,
         tickers: list[str],
         evaluations: dict[str, dict],
         minkabu: dict[str, str],
-        news: Optional[list[dict]] = None,
     ) -> str:
-        lines = []
-        date_str = datetime.now().strftime("%Y-%m-%d")
-        lines.append(f"Today: {date_str}")
+        lines = [f"Today: {datetime.now().strftime('%Y-%m-%d')}", ""]
+        lines.append("## BBS Hot Tickers (Yahoo Finance Japan — ranked by discussion volume)")
         lines.append("")
-        lines.append("## BBS Hot Tickers (ranked by discussion volume)")
-        lines.append("Source: Yahoo Finance Japan BBS activity ranking.")
-        lines.append("")
-
         for i, ticker in enumerate(tickers[:40], 1):
             ev = evaluations.get(ticker)
             if ev:
                 bull = ev["strongest"] + ev["strong"]
                 bear = ev["weak"] + ev["weakest"]
-                neutral = ev["both"]
-                lines.append(f"{i:2}. {ticker}  Bull {bull:.0f}% | Neutral {neutral:.0f}% | Bear {bear:.0f}%")
+                lines.append(f"{i:2}. {ticker}  Bull {bull:.0f}% | Neutral {ev['both']:.0f}% | Bear {bear:.0f}%")
             else:
                 lines.append(f"{i:2}. {ticker}")
-
         if minkabu:
             lines.append("")
-            lines.append("## Minkabu Analyst Consensus (recent data)")
+            lines.append("## Minkabu アナリストコンセンサス（直近データ）")
             for ticker, text in list(minkabu.items())[:15]:
                 lines.append(f"\n### {ticker}")
                 lines.append(text)
+        return "\n".join(lines)
 
-        if news:
-            lines.append("")
-            lines.append("## Recent News Headlines (past 48h)")
-            lines.append("Sources: NHK Business, Reuters, Google News (JP economy, semiconductors, AI infrastructure)")
-            lines.append("")
-            for item in news[:50]:
-                source = item.get("source", "")
-                title = item.get("title", "")
-                summary = (item.get("summary") or "")[:200]
-                lines.append(f"- [{source}] {title}")
-                if summary:
-                    lines.append(f"  {summary}")
-
+    def _build_en_context(self, news: list[dict]) -> str:
+        lines = [f"Today: {datetime.now().strftime('%Y-%m-%d')}", ""]
+        lines.append("## Recent News Headlines (past 48h)")
+        lines.append("Sources: NHK Business, Google News (JP economy, semiconductors, AI infrastructure, robotics, pharma)")
+        lines.append("")
+        for item in news[:60]:
+            source = item.get("source", "")
+            title = item.get("title", "")
+            summary = (item.get("summary") or "")[:200]
+            lines.append(f"- [{source}] {title}")
+            if summary:
+                lines.append(f"  {summary}")
         if self.tree:
             lines.append("")
             lines.append("## Current River Tree (known instruments)")
-            lines.append("Use this to avoid suggesting already-mapped tickers and to identify thin/empty layers.")
+            lines.append("Use this to identify thin/empty layers for RIVER GAP hints.")
             for river in self.tree.list_rivers():
                 by_layer = {layer: [] for layer in LAYERS}
                 for node in river.nodes:
@@ -200,12 +192,29 @@ class Synthesizer:
                         by_layer[node.layer].append(node.ticker)
                 layer_parts = []
                 for layer in LAYERS:
-                    tickers = by_layer[layer]
-                    status = ", ".join(tickers) if tickers else "(empty)"
-                    layer_parts.append(f"{layer}: {status}")
+                    t = by_layer[layer]
+                    layer_parts.append(f"{layer}: {', '.join(t) if t else '(empty)'}")
                 lines.append(f"  {river.name}: {' | '.join(layer_parts)}")
-
         return "\n".join(lines)
+
+    def _llm(self, system: str, context: str, max_tokens: int = 900) -> str:
+        if self.provider == "openai":
+            model = LLM_MODEL or _OPENAI_DEFAULT
+            resp = self.client.chat.completions.create(
+                model=model,
+                max_tokens=max_tokens,
+                messages=[{"role": "system", "content": system}, {"role": "user", "content": context}],
+            )
+            return resp.choices[0].message.content
+        else:
+            model = LLM_MODEL or _ANTHROPIC_DEFAULT
+            resp = self.client.messages.create(
+                model=model,
+                max_tokens=max_tokens,
+                system=[{"type": "text", "text": system, "cache_control": {"type": "ephemeral"}}],
+                messages=[{"role": "user", "content": context}],
+            )
+            return resp.content[0].text
 
     def generate(self) -> str:
         since = datetime.now() - timedelta(hours=48)
@@ -217,66 +226,58 @@ class Synthesizer:
         evaluations = self._load_evaluations(tickers, since)
         minkabu = self._load_minkabu(tickers, since)
         news = self._load_news(since)
-        context = self._build_context(tickers, evaluations, minkabu, news)
         date_str = datetime.now().strftime("%Y-%m-%d")
-
-        jp_sources = " ".join(minkabu.values())
-        en_sources = " ".join(item.get("title", "") for item in (news or []))
-        lang = detect_lang(jp_sources, en_sources)
 
         river_context = ""
         if self.tree and self.tree.list_rivers():
-            river_context = "\n\nThe investor uses a Thematic Supply Chain River framework with 4 layers:\n"
-            river_context += "  source → upper → middle (highest alpha, 2-3x) → lower\n"
-            river_context += "Known rivers: " + ", ".join(r.name for r in self.tree.list_rivers())
-            river_context += "\nThe Current River Tree section in the data shows what is already mapped. "
-            river_context += "Prioritize finding instruments for empty or thin layers."
+            river_context = "\nKnown rivers: " + ", ".join(r.name for r in self.tree.list_rivers())
+            river_context += "\nLayers: source → upper → middle (highest alpha) → lower"
 
-        system_prompt = f"""\
-You are a financial research scout writing a Daily Digest for a self-directed investor.
+        # --- Call 1: Japanese hints from BBS + Minkabu ---
+        jp_system = f"""\
+あなたは自己投資家向けのデイリーダイジェストを書く金融リサーチスカウトです。
 
-The investor's goal: discover stocks, sectors, or themes they haven't noticed yet — \
-things they wouldn't have searched for because they didn't know they existed. \
-They discovered stocks like NBIS and CLSK by browsing Yahoo Finance Japan BBS. \
-That's the kind of discovery you're enabling.
+投資家の目標：まだ気づいていない銘柄・セクター・テーマを発見すること。
+保有期間は数週間〜数ヶ月。ヒントを見てから自分で調査します。{river_context}
 
-The investor holds positions for weeks to months and does their own research after reading the digest.{river_context}
+## 出力フォーマット
 
-## Digest format
+以下のヒントタイプから3〜4件、日本語で書いてください：
+- [NEW NAME]: リバーツリーにない銘柄で、BBS活動が異常に高い、または強気センチメントが強い
+- [HOLDING SIGNAL]: 株価が下落しても強気センチメントが維持されている — 再検討の価値あり
+- [SECTOR THEME]: 同じセクターの複数銘柄が類似したシグナルを示している
 
-Start with: === Elephant Digest · {date_str} ===
-
-Then 5 to 8 hints using these types:
-- [NEW NAME]: a ticker not yet in the river tree, with unusual BBS activity or strong bull sentiment
-- [RIVER GAP]: a layer in a known river that is empty or thin — suggest what type of instrument to look for
-- [HOLDING SIGNAL]: sentiment staying strong despite a price drop — worth revisiting the thesis
-- [SECTOR THEME]: multiple tickers in the same sector showing similar signals
-- [MACRO OBSERVATION]: a macro or currency angle worth watching
-
-Each hint: 3 to 5 lines. End with "→ Worth looking at..." or "→ Worth checking..."
-State which signal triggered each hint (BBS rank position, bull ratio, Minkabu consensus, etc.)
-Do not suggest tickers already in the river tree unless it is a holding signal.
-Tone: opinionated but humble. "Worth looking at" not "Buy this."
-{lang_instruction(lang)}\
+各ヒント：3〜5行。「→ 注目の価値あり」または「→ 確認の価値あり」で締めること。
+どのシグナルがヒントのトリガーになったか明記（BBS順位、強気比率、Minkabuコンセンサスなど）。
+リバーツリーにある銘柄はHOLDING SIGNALでない限り提案しないこと。
+トーン：意見ははっきりと、でも謙虚に。「注目の価値あり」であって「買え」ではない。
+ヘッダー行は出力しないこと（=== Elephant Digest... の行は不要）。\
 """
 
-        if self.provider == "openai":
-            model = LLM_MODEL or _OPENAI_DEFAULT
-            response = self.client.chat.completions.create(
-                model=model,
-                max_tokens=1500,
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": context},
-                ],
-            )
-            return response.choices[0].message.content
-        else:
-            model = LLM_MODEL or _ANTHROPIC_DEFAULT
-            response = self.client.messages.create(
-                model=model,
-                max_tokens=1500,
-                system=[{"type": "text", "text": system_prompt, "cache_control": {"type": "ephemeral"}}],
-                messages=[{"role": "user", "content": context}],
-            )
-            return response.content[0].text
+        # --- Call 2: English hints from news + river tree ---
+        en_system = f"""\
+You are a financial research scout writing part of a Daily Digest for a self-directed investor.
+The investor holds positions for weeks to months and does their own research after reading the digest.{river_context}
+
+Write 2 to 3 hints in English based ONLY on the news headlines and river tree below.
+Use these hint types:
+- [RIVER GAP]: a layer in a known river that is empty or thin — suggest what type of instrument to look for
+- [MACRO OBSERVATION]: a macro, currency, or geopolitical angle worth watching
+- [SECTOR THEME]: a theme emerging from multiple news items pointing at the same supply chain layer
+
+Each hint: 3 to 5 lines. End with "→ Worth looking at..." or "→ Worth checking..."
+State which news items or river gap triggered the hint.
+Do not suggest tickers already in the river tree.
+Tone: opinionated but humble.
+Do NOT output a header line (no === Elephant Digest... line).\
+"""
+
+        jp_hints = self._llm(jp_system, self._build_jp_context(tickers, evaluations, minkabu))
+        en_hints = self._llm(en_system, self._build_en_context(news))
+
+        return (
+            f"=== Elephant Digest · {date_str} ===\n\n"
+            f"{jp_hints.strip()}\n\n"
+            f"---\n\n"
+            f"{en_hints.strip()}"
+        )
