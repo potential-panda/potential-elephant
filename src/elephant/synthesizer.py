@@ -119,6 +119,35 @@ class Synthesizer:
         combined = combined.sort_values("scraped_at", ascending=False)
         return combined.head(60).to_dict("records")
 
+    def _load_prices(self, tickers: list[str]) -> dict[str, dict]:
+        if not tickers:
+            return {}
+        try:
+            import yfinance as yf
+            hist = yf.download(tickers, period="1mo", progress=False, auto_adjust=True)
+            if hist.empty:
+                return {}
+            closes = hist["Close"]
+            if not hasattr(closes, "columns"):
+                closes = closes.to_frame(name=tickers[0])
+            result = {}
+            for ticker in tickers:
+                if ticker not in closes.columns:
+                    continue
+                series = closes[ticker].dropna()
+                if len(series) < 2:
+                    continue
+                price_now = float(series.iloc[-1])
+                price_1mo = float(series.iloc[0])
+                result[ticker] = {
+                    "price": price_now,
+                    "chg_1mo": (price_now - price_1mo) / price_1mo * 100,
+                }
+            return result
+        except Exception:
+            logging.exception("Failed to load prices for digest")
+            return {}
+
     def _load_minkabu(self, tickers: list[str], since: datetime) -> dict[str, str]:
         results = {}
         year = datetime.now().strftime("%Y")
@@ -149,18 +178,24 @@ class Synthesizer:
         tickers: list[str],
         evaluations: dict[str, dict],
         minkabu: dict[str, str],
+        prices: dict[str, dict],
     ) -> str:
         lines = [f"Today: {datetime.now().strftime('%Y-%m-%d')}", ""]
         lines.append("## BBS Hot Tickers (Yahoo Finance Japan — ranked by discussion volume)")
+        lines.append("Columns: BBS rank | ticker | sentiment | 1-month price change")
         lines.append("")
         for i, ticker in enumerate(tickers[:40], 1):
             ev = evaluations.get(ticker)
+            pr = prices.get(ticker)
+            sentiment = ""
             if ev:
                 bull = ev["strongest"] + ev["strong"]
                 bear = ev["weak"] + ev["weakest"]
-                lines.append(f"{i:2}. {ticker}  Bull {bull:.0f}% | Neutral {ev['both']:.0f}% | Bear {bear:.0f}%")
-            else:
-                lines.append(f"{i:2}. {ticker}")
+                sentiment = f"Bull {bull:.0f}% | Neutral {ev['both']:.0f}% | Bear {bear:.0f}%"
+            price_str = ""
+            if pr:
+                price_str = f"| {pr['chg_1mo']:+.1f}% 1mo"
+            lines.append(f"{i:2}. {ticker}  {sentiment}  {price_str}".rstrip())
         if minkabu:
             lines.append("")
             lines.append("## Minkabu アナリストコンセンサス（直近データ）")
@@ -226,6 +261,7 @@ class Synthesizer:
         evaluations = self._load_evaluations(tickers, since)
         minkabu = self._load_minkabu(tickers, since)
         news = self._load_news(since)
+        prices = self._load_prices(tickers[:40])
         date_str = datetime.now().strftime("%Y-%m-%d")
 
         river_context = ""
@@ -244,7 +280,7 @@ class Synthesizer:
 
 以下のヒントタイプから3〜4件、日本語で書いてください：
 - [NEW NAME]: リバーツリーにない銘柄で、BBS活動が異常に高い、または強気センチメントが強い
-- [HOLDING SIGNAL]: 株価が下落しても強気センチメントが維持されている — 再検討の価値あり
+- [HOLDING SIGNAL]: 直近1ヶ月で株価が下落（1mo欄がマイナス）しているにも関わらず、強気センチメントが高い水準を維持している銘柄 — 底堅さの確認価値あり
 - [SECTOR THEME]: 同じセクターの複数銘柄が類似したシグナルを示している
 
 各ヒント：3〜5行。「→ 注目の価値あり」または「→ 確認の価値あり」で締めること。
@@ -272,7 +308,7 @@ Tone: opinionated but humble.
 Do NOT output a header line (no === Elephant Digest... line).\
 """
 
-        jp_hints = self._llm(jp_system, self._build_jp_context(tickers, evaluations, minkabu))
+        jp_hints = self._llm(jp_system, self._build_jp_context(tickers, evaluations, minkabu, prices))
         en_hints = self._llm(en_system, self._build_en_context(news))
 
         return (
