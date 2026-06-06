@@ -1,6 +1,9 @@
 import asyncio
+import json
 import random
 import re
+from datetime import datetime, timedelta
+from pathlib import Path
 
 from playwright.async_api import async_playwright
 from playwright_stealth import Stealth
@@ -8,6 +11,9 @@ from playwright_stealth import Stealth
 from elephant.framework import Harvester, Store
 
 BASE_URL = "https://finance.yahoo.co.jp/stocks/ranking/bbs?market=all&term=daily"
+
+CACHE_TTL_DAYS = 7
+CACHE_MAX_TICKERS = 300
 
 USER_AGENTS = [
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36",
@@ -74,10 +80,51 @@ class BbsRankHarvester(Harvester):
             await browser.close()
 
         if all_tickers:
-            with open(self.tickers_file, "w") as f:
-                f.write("\n".join(all_tickers) + "\n")
-            print(f"[BbsRank] Wrote {len(all_tickers)} tickers to {self.tickers_file}")
+            self._update_cache(all_tickers)
         else:
             print("[BbsRank] No tickers found, tickers.txt not updated.")
 
         return {}
+
+    def _cache_path(self) -> Path:
+        return Path(self.tickers_file).with_suffix(".cache.json")
+
+    def _load_cache(self) -> dict[str, str]:
+        path = self._cache_path()
+        if path.exists():
+            try:
+                return json.loads(path.read_text())
+            except Exception:
+                pass
+        return {}
+
+    def _update_cache(self, today_tickers: list[str]) -> None:
+        today = datetime.now().date()
+        cutoff = today - timedelta(days=CACHE_TTL_DAYS)
+        today_str = today.isoformat()
+
+        cache = self._load_cache()
+
+        # Refresh last_seen for today's ranked tickers
+        for ticker in today_tickers:
+            cache[ticker] = today_str
+
+        # Evict entries older than TTL
+        cache = {t: d for t, d in cache.items() if d >= cutoff.isoformat()}
+
+        # Cap at max: keep most recently seen, preserving today's rank order first
+        if len(cache) > CACHE_MAX_TICKERS:
+            sorted_entries = sorted(cache.items(), key=lambda x: (x[1], today_tickers.index(x[0]) if x[0] in today_tickers else 999), reverse=True)
+            cache = dict(sorted_entries[:CACHE_MAX_TICKERS])
+
+        # Save cache
+        self._cache_path().write_text(json.dumps(cache, indent=2))
+
+        # Write tickers.txt: today's ranked tickers first, then retained cache tickers
+        retained = [t for t in cache if t not in today_tickers]
+        final_list = today_tickers + retained
+
+        with open(self.tickers_file, "w") as f:
+            f.write("\n".join(final_list) + "\n")
+
+        print(f"[BbsRank] {len(today_tickers)} tickers today + {len(retained)} retained = {len(final_list)} total in tickers.txt")
