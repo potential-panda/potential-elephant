@@ -49,18 +49,11 @@ def _chunk(text: str, size: int = DISCORD_MAX_LEN) -> list[str]:
 
 
 def _send_webhook(webhook_url: str, text: str) -> None:
-    import urllib.request, urllib.parse, json
+    import requests
     for chunk in _chunk(text):
-        payload = json.dumps({"content": f"```\n{chunk}\n```"}).encode()
-        req = urllib.request.Request(
-            webhook_url,
-            data=payload,
-            headers={"Content-Type": "application/json"},
-            method="POST",
-        )
-        with urllib.request.urlopen(req) as resp:
-            if resp.status not in (200, 204):
-                raise RuntimeError(f"Webhook returned {resp.status}")
+        resp = requests.post(webhook_url, json={"content": chunk}, timeout=10)
+        if resp.status_code not in (200, 204):
+            raise RuntimeError(f"Webhook returned {resp.status_code}: {resp.text}")
 
 
 async def _send_bot(token: str, channel_id: str, text: str) -> None:
