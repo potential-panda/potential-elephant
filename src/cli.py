@@ -72,7 +72,7 @@ async def fetch_cmd(args):
     if args.dataset == "tdnet_disclosures":
         try:
             print("\n--- Fetching TDnet disclosures ---")
-            harvester = TDnetHarvester(store, TICKERS_FILE, lookback_days=1)
+            harvester = TDnetHarvester(store, lookback_days=1)
             await harvester.start({})
             print("Finished fetching TDnet disclosures")
         except Exception:
@@ -551,7 +551,7 @@ def schedule_cmd(args):
     yjp_planner = YahooFinancePlanner(store, TICKERS_FILE)
     minkabu_planner = MinkabuPlanner(store, TICKERS_FILE)
     news_planner = NewsPlanner(store)
-    tdnet_planner = TDnetPlanner(store, TICKERS_FILE)
+    tdnet_planner = TDnetPlanner(store)
 
     multi_planner = MultiPlanner([bbs_rank_planner, yjp_planner, minkabu_planner, news_planner, tdnet_planner])
     scheduler = Scheduler(multi_planner)

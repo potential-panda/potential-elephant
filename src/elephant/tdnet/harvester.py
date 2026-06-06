@@ -97,30 +97,21 @@ def _fetch_date(date_str: str, watched: set[str]) -> list[dict]:
 
 
 class TDnetHarvester(Harvester):
-    def __init__(self, store: Store, tickers_file: str, lookback_days: int = 1):
+    def __init__(self, store: Store, lookback_days: int = 1):
         super().__init__(store)
-        self.tickers_file = tickers_file
         self.lookback_days = lookback_days
 
     def get_url(self, params: dict) -> str:
         return BASE_URL
 
-    def _watched_tickers(self) -> set[str]:
-        try:
-            with open(self.tickers_file) as f:
-                return {line.strip() for line in f if line.strip()}
-        except FileNotFoundError:
-            return set()
-
     async def scrape(self, url: str, params: dict) -> dict[str, HarvesterResult]:
-        watched = self._watched_tickers()
         today = datetime.now(JST).date()
         results = {}
 
         for offset in range(self.lookback_days + 1):
             target = today - timedelta(days=offset)
             date_str = target.strftime("%Y%m%d")
-            rows = _fetch_date(date_str, watched)
+            rows = _fetch_date(date_str, watched=set())
             if not rows:
                 continue
 
