@@ -23,6 +23,8 @@ from elephant.synthesizer import (
     _OPENAI_DEFAULT,
     _make_client,
     _strip_html,
+    detect_lang,
+    lang_instruction,
 )
 
 
@@ -264,7 +266,15 @@ class Diver:
         context = self._build_context(ticker)
         date_str = datetime.now().strftime("%Y-%m-%d")
 
-        system = """\
+        # Detect language from JP sources (comments + Minkabu) vs EN sources (news)
+        comments = self._load_comments(ticker_t)
+        minkabu = self._load_minkabu(ticker_t)
+        news = self._load_news(ticker, ticker_t)
+        jp_sources = " ".join(comments) + " " + minkabu
+        en_sources = " ".join(news)
+        lang = detect_lang(jp_sources, en_sources)
+
+        system = f"""\
 You are a financial research analyst writing a Deep Dive brief for a self-directed investor.
 The investor holds positions for weeks to months and does their own final research.
 They want to understand: what this company actually does, why the BBS community is interested,
@@ -273,7 +283,7 @@ Thematic Supply Chain River framework (source → upper → middle → lower).
 
 Write a structured brief with these sections:
 
-=== Deep Dive: {ticker} · {date} ===
+=== Deep Dive: {ticker_t} · {date_str} ===
 
 ## What It Is
 2–3 sentences: core business, sector, market position.
@@ -296,7 +306,8 @@ Which layer? Or is it a speculative outlier with no clean fit?
 3–5 sentences. Worth investigating further, or noise? What would change your mind?
 End with one of: → Add to watchlist | → River candidate: [river/layer] | → Pass for now
 
-Language: direct and honest. Flag speculation clearly. "Worth investigating" not "Buy this."\
+Style: direct and honest. Flag speculation clearly. "Worth investigating" not "Buy this."
+{lang_instruction(lang)}\
 """
 
-        return self._llm(system.replace("{ticker}", ticker_t).replace("{date}", date_str), context)
+        return self._llm(system, context)

@@ -5,6 +5,25 @@ import re
 from datetime import datetime, timedelta
 from typing import Optional
 
+
+def detect_lang(jp_text: str, en_text: str) -> str:
+    """Return 'ja', 'en', or 'mixed' based on whether Japanese content is present."""
+    has_jp = bool(re.search(r'[぀-ヿ一-鿿]', jp_text or ""))
+    has_en = bool(en_text and en_text.strip())
+    if has_jp and not has_en:
+        return "ja"
+    if has_jp and has_en:
+        return "mixed"
+    return "en"
+
+
+def lang_instruction(lang: str) -> str:
+    if lang == "ja":
+        return "言語指定: 日本語で回答してください。"
+    if lang == "mixed":
+        return "Language: Respond in English (sources are mixed Japanese/English)."
+    return "Language: Respond in English."
+
 import pandas as pd
 
 from elephant.river.tree import LAYER_LABELS, LAYERS, RiverTree
@@ -201,6 +220,10 @@ class Synthesizer:
         context = self._build_context(tickers, evaluations, minkabu, news)
         date_str = datetime.now().strftime("%Y-%m-%d")
 
+        jp_sources = " ".join(minkabu.values())
+        en_sources = " ".join(item.get("title", "") for item in (news or []))
+        lang = detect_lang(jp_sources, en_sources)
+
         river_context = ""
         if self.tree and self.tree.list_rivers():
             river_context = "\n\nThe investor uses a Thematic Supply Chain River framework with 4 layers:\n"
@@ -233,7 +256,8 @@ Then 5 to 8 hints using these types:
 Each hint: 3 to 5 lines. End with "→ Worth looking at..." or "→ Worth checking..."
 State which signal triggered each hint (BBS rank position, bull ratio, Minkabu consensus, etc.)
 Do not suggest tickers already in the river tree unless it is a holding signal.
-Language: opinionated but humble. "Worth looking at" not "Buy this."\
+Tone: opinionated but humble. "Worth looking at" not "Buy this."
+{lang_instruction(lang)}\
 """
 
         if self.provider == "openai":
