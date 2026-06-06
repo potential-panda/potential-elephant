@@ -91,13 +91,63 @@ async def fetch_cmd(args):
 
 
 def query_cmd(args):
+    import glob
+
+    # --- news_headlines: date-partitioned, no ticker ---
+    if args.dataset == "news_headlines":
+        pattern = os.path.join(DATA_DIR, "dataset=news_headlines", "date=*", "data.parquet")
+        files = sorted(glob.glob(pattern), reverse=True)
+        if not files:
+            print("No news data found. Run: python src/cli.py fetch --dataset news_headlines")
+            return
+
+        dfs = []
+        for f in files:
+            try:
+                dfs.append(pd.read_parquet(f))
+            except Exception as e:
+                logging.warning(f"Failed to read {f}: {e}")
+
+        df = pd.concat(dfs, ignore_index=True)
+        df["scraped_at"] = pd.to_datetime(df["scraped_at"])
+        df = df.sort_values("scraped_at", ascending=False)
+
+        if args.keyword:
+            mask = df["title"].str.contains(args.keyword, case=False, na=False)
+            if "summary" in df.columns:
+                mask |= df["summary"].fillna("").str.contains(args.keyword, case=False, na=False)
+            df = df[mask]
+            print(f"\n--- News matching '{args.keyword}' ---")
+        else:
+            df = df.head(args.limit if hasattr(args, "limit") else 50)
+            print(f"\n--- Latest {len(df)} news items ---")
+
+        if df.empty:
+            print("No matching news found.")
+            return
+
+        import re as _re
+        for _, row in df.iterrows():
+            date = pd.to_datetime(row["scraped_at"]).strftime("%Y-%m-%d")
+            source = row.get("source", "")
+            title = row.get("title", "")
+            raw_summary = row.get("summary") or ""
+            summary = _re.sub(r"<[^>]+>", "", raw_summary)
+            summary = _re.sub(r"&[a-z]+;", " ", summary).strip()[:120]
+            print(f"[{date}] [{source}] {title}")
+            if summary:
+                print(f"  {summary}")
+        return
+
+    # --- ticker-based datasets ---
     ticker = args.ticker
+    if not ticker:
+        print("--ticker is required for this dataset.")
+        return
     if not ticker.endswith(".T"):
         ticker = f"{ticker}.T"
 
     path_pattern = os.path.join(DATA_DIR, f"dataset={args.dataset}", f"ticker={ticker}", "**", "data.parquet")
-    import glob
-
     files = glob.glob(path_pattern, recursive=True)
 
     if not files:
@@ -122,12 +172,8 @@ def query_cmd(args):
             try:
                 dt_range = DtRange.from_strings(args.start, args.end)
                 target_days = dt_range.days
-                if args.dataset == "yahoo_comments":
-                    df["date_tmp"] = pd.to_datetime(df["scraped_at"]).dt.strftime("%Y-%m-%d")
-                    df = df[df["date_tmp"].isin(target_days)]
-                elif args.dataset in ["yahoo_evaluations", "minkabu_raw_html"]:
-                    df["date_tmp"] = pd.to_datetime(df["scraped_at"]).dt.strftime("%Y-%m-%d")
-                    df = df[df["date_tmp"].isin(target_days)]
+                df["date_tmp"] = pd.to_datetime(df["scraped_at"]).dt.strftime("%Y-%m-%d")
+                df = df[df["date_tmp"].isin(target_days)]
             except Exception as e:
                 print(f"Error processing date range: {e}")
 
@@ -523,11 +569,15 @@ def main():
     # query
     query_parser = subparsers.add_parser("query", help="Query stored dataset")
     query_parser.add_argument(
-        "--dataset", choices=["yahoo_comments", "yahoo_evaluations", "minkabu_raw_html"], required=True
+        "--dataset",
+        choices=["yahoo_comments", "yahoo_evaluations", "minkabu_raw_html", "news_headlines"],
+        required=True,
     )
-    query_parser.add_argument("--ticker", required=True)
+    query_parser.add_argument("--ticker", default=None, help="Ticker (required for BBS/Minkabu datasets)")
     query_parser.add_argument("--start")
     query_parser.add_argument("--end")
+    query_parser.add_argument("--keyword", default=None, help="Filter news by keyword (news_headlines only)")
+    query_parser.add_argument("--limit", type=int, default=50, help="Max items to show (news_headlines only)")
 
     # digest
     subparsers.add_parser("digest", help="Generate daily research digest")
