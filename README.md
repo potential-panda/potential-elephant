@@ -218,6 +218,10 @@ src/elephant/
     harvester.py          #   NHK Business, Reuters, Google News (JP economy / semi / AI)
     planner.py            #   3x daily schedule
 
+  tdnet/                  # TDnet timely disclosure harvester
+    harvester.py          #   scrapes release.tdnet.info, filters to watched tickers
+    planner.py            #   4x daily on market days (8, 12, 15, 18 JST)
+
   river/                  # River Tree — the knowledge database
     tree.py               #   RiverTree, River, Node, NewsItem + JSON persistence
     discoverer.py         #   Claude-powered ticker classification into rivers
@@ -257,12 +261,13 @@ All datasets are Parquet files, partitioned for fast date-range queries.
 |---|---|---|
 | BBS + Minkabu scraping | ✅ done | Daily sentiment pipeline |
 | News RSS harvester | ✅ done | NHK, Reuters, Google News |
-| Daily Digest (LLM) | ✅ done | `digest` command via Claude API |
+| Daily Digest (LLM) | ✅ done | Bilingual digest: JP hints (BBS/Minkabu) + EN hints (news/river gaps) |
 | River Tree | ✅ done | Knowledge database with CRUD CLI |
 | Discovery Engine | ✅ done | `discover` command, autonomous + targeted |
 | Deep Dive | ✅ done | `dive --ticker X` — full research brief on demand |
-| Price / volume data | ✅ done | yfinance OHLCV, 52-week range, volume anomalies (used in dive) |
-| TDnet integration | ⬜ next | JP timely disclosures (earnings, M&A) |
+| Price / volume data | ✅ done | Live yfinance fetch at digest time for top 40 tickers (1-month change) |
+| Comment speed history | ✅ done | Comments/hour per ticker tracked in cache, fed into digest as velocity signal |
+| TDnet integration | ✅ done | JP timely disclosures scraped 4×/day, filtered to watched tickers, included in digest |
 
 ---
 
