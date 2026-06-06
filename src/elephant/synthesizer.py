@@ -30,7 +30,7 @@ from elephant.river.tree import LAYER_LABELS, LAYERS, RiverTree
 
 # LLM_PROVIDER: "anthropic" (default) or "openai"
 # LLM_MODEL: override the default model for the chosen provider
-LLM_PROVIDER = os.environ.get("LLM_PROVIDER", "anthropic").lower()
+LLM_PROVIDER = os.environ.get("LLM_PROVIDER", "openai").lower()
 LLM_MODEL = os.environ.get("LLM_MODEL", "")
 
 _ANTHROPIC_DEFAULT = "claude-sonnet-4-6"
