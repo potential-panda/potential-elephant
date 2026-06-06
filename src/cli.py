@@ -218,6 +218,10 @@ def dive_cmd(args):
 
     logging.info(f"Dive saved to {md_path}")
 
+    from elephant.formatter import to_markdown
+    from elephant.notifier import send as notify
+    notify(to_markdown(brief))
+
 
 # --- tree ---
 
