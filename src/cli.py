@@ -5,12 +5,10 @@ import os
 from datetime import datetime
 from typing import List
 
-import elephant.secrets as _secrets
-_secrets.load()
-
 import pandas as pd
 from qate.util.dt_range import DtRange
 
+import elephant.secrets as _secrets
 from elephant.framework import HarvesterTask, Planner, Scheduler, Store
 from elephant.minkabu.harvester import MinkabuHarvester
 from elephant.minkabu.planner import MinkabuPlanner
@@ -29,6 +27,8 @@ TICKERS_FILE = "tickers.txt"
 DATA_DIR = "/panda-infra/elephant"
 TREE_PATH = os.path.join(DATA_DIR, "river_tree.json")
 
+_secrets.load()
+
 
 class MultiPlanner(Planner):
     def __init__(self, planners: List[Planner]):
@@ -42,6 +42,7 @@ class MultiPlanner(Planner):
 
 
 # --- fetch ---
+
 
 async def fetch_cmd(args):
     store = Store(DATA_DIR)
@@ -87,6 +88,7 @@ async def fetch_cmd(args):
 
 
 # --- query ---
+
 
 def query_cmd(args):
     ticker = args.ticker
@@ -159,6 +161,7 @@ def query_cmd(args):
 
 # --- digest ---
 
+
 def digest_cmd(args):
     from elephant.synthesizer import Synthesizer
 
@@ -179,16 +182,74 @@ def digest_cmd(args):
     logging.info(f"Digest saved to {output_path}")
 
     from elephant.formatter import to_html
+
     html_path = os.path.join(digests_dir, f"{date_str}.html")
     with open(html_path, "w", encoding="utf-8") as f:
         f.write(to_html(digest))
     logging.info(f"HTML digest saved to {html_path}")
 
     from elephant.notifier import send as notify
+
     notify(digest)
 
 
+# --- tickers ---
+
+
+def tickers_cmd(args):
+    import glob
+    from datetime import timedelta
+
+    days = args.days
+    since = datetime.now() - timedelta(days=days)
+    datasets = ["yahoo_comments", "yahoo_evaluations", "minkabu_raw_html"]
+
+    # ticker -> {dataset -> latest scraped_at}
+    ticker_data: dict[str, dict] = {}
+
+    for dataset in datasets:
+        pattern = os.path.join(DATA_DIR, f"dataset={dataset}", "ticker=*", "**", "data.parquet")
+        for f in glob.glob(pattern, recursive=True):
+            ticker = f.split(f"dataset={dataset}/ticker=")[1].split("/")[0]
+            try:
+                df = pd.read_parquet(f, columns=["scraped_at"])
+                df["scraped_at"] = pd.to_datetime(df["scraped_at"])
+                latest = df["scraped_at"].max()
+                if latest >= since:
+                    if ticker not in ticker_data:
+                        ticker_data[ticker] = {}
+                    prev = ticker_data[ticker].get(dataset)
+                    if prev is None or latest > prev:
+                        ticker_data[ticker][dataset] = latest
+            except Exception:
+                pass
+
+    if not ticker_data:
+        print(f"No tickers with data in the last {days} days.")
+        return
+
+    # sort by most recently active
+    sorted_tickers = sorted(
+        ticker_data.items(),
+        key=lambda x: max(x[1].values()),
+        reverse=True,
+    )
+
+    ds_short = {"yahoo_comments": "comments", "yahoo_evaluations": "eval", "minkabu_raw_html": "minkabu"}
+    print(f"\n{'Ticker':<12} {'Last Active':<14} {'Datasets'}")
+    print("-" * 55)
+    for ticker, ds_map in sorted_tickers:
+        last = max(ds_map.values()).strftime("%Y-%m-%d")
+        datasets_str = "  ".join(
+            f"{ds_short[d]}({ds_map[d].strftime('%m-%d')})" for d in datasets if d in ds_map
+        )
+        print(f"{ticker:<12} {last:<14} {datasets_str}")
+
+    print(f"\nTotal: {len(sorted_tickers)} tickers with data in the last {days} days.")
+
+
 # --- dive ---
+
 
 def dive_cmd(args):
     from elephant.diver import Diver
@@ -220,10 +281,12 @@ def dive_cmd(args):
 
     from elephant.formatter import to_markdown
     from elephant.notifier import send as notify
+
     notify(to_markdown(brief))
 
 
 # --- tree ---
+
 
 def tree_cmd(args):
     tree = RiverTree(TREE_PATH)
@@ -297,8 +360,7 @@ def tree_cmd(args):
 
     elif args.tree_cmd == "node-update":
         kwargs = {
-            k: v for k, v in vars(args).items()
-            if k in ("layer", "name", "market", "role", "notes") and v is not None
+            k: v for k, v in vars(args).items() if k in ("layer", "name", "market", "role", "notes") and v is not None
         }
         if tree.update_node(args.river, args.ticker, **kwargs):
             print(f"Updated {args.ticker} in river '{args.river}'")
@@ -322,10 +384,12 @@ def tree_cmd(args):
         print(f"Added news for {args.ticker}: {args.title[:60]}")
 
     else:
-        print("Unknown tree command. Use: show, init, river-add, river-remove, node-add, node-update, node-remove, news-add")
+        print("Unknown tree command.")
+        print("Use: show, init, river-add, river-remove, node-add, node-update, node-remove, news-add")
 
 
 # --- discover ---
+
 
 def discover_cmd(args):
     tree = RiverTree(TREE_PATH)
@@ -336,7 +400,12 @@ def discover_cmd(args):
         print(f"Classifying {args.ticker}...")
         result = discoverer.classify_ticker(args.ticker)
         _print_suggestion(result)
-        if result and args.auto and result.get("fits_existing_river") and result.get("confidence") in ("high", "medium"):
+        if (
+            result
+            and args.auto
+            and result.get("fits_existing_river")
+            and result.get("confidence") in ("high", "medium")
+        ):
             _auto_add(tree, result)
 
     elif args.keyword:
@@ -378,7 +447,9 @@ def _print_suggestion(result: dict) -> None:
         print(f"Layer:   {result.get('layer')}")
     else:
         new_river = result.get("new_river_name")
-        print(f"River:   (new river suggested: {new_river})" if new_river else "River:   (does not fit any known river)")
+        print(
+            f"River:   (new river suggested: {new_river})" if new_river else "River:   (does not fit any known river)"
+        )
     print(f"Name:    {result.get('name', '')}")
     print(f"Role:    {result.get('role', '')}")
     print(f"Reason:  {result.get('reasoning', '')}")
@@ -401,6 +472,7 @@ def _auto_add(tree: RiverTree, result: dict) -> None:
 
 
 # --- schedule ---
+
 
 def schedule_cmd(args):
     store = Store(DATA_DIR)
@@ -433,6 +505,7 @@ def schedule_cmd(args):
 
 
 # --- main ---
+
 
 def main():
     logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
@@ -518,6 +591,9 @@ def main():
     dive_parser = subparsers.add_parser("dive", help="Deep dive research brief on a single ticker")
     dive_parser.add_argument("--ticker", required=True, help="Ticker to deep dive (e.g. 8105.T or NVDA)")
 
+    tickers_parser = subparsers.add_parser("tickers", help="List tickers with harvested data in the last N days")
+    tickers_parser.add_argument("--days", type=int, default=14, help="Lookback window in days (default: 14)")
+
     args = parser.parse_args()
 
     if args.command == "fetch":
@@ -534,6 +610,8 @@ def main():
         discover_cmd(args)
     elif args.command == "dive":
         dive_cmd(args)
+    elif args.command == "tickers":
+        tickers_cmd(args)
     else:
         parser.print_help()
 
