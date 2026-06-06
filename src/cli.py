@@ -23,7 +23,7 @@ from elephant.yjp.planner import YahooFinancePlanner
 from elephant.yjp_bbs_rank.harvester import BbsRankHarvester
 from elephant.yjp_bbs_rank.planner import BbsRankPlanner
 
-TICKERS_FILE = "tickers.txt"
+TICKERS_FILE = "/panda-infra/elephant/tickers.txt"
 DATA_DIR = "/panda-infra/elephant"
 TREE_PATH = os.path.join(DATA_DIR, "river_tree.json")
 
