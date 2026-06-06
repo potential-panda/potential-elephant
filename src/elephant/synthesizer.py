@@ -119,6 +119,20 @@ class Synthesizer:
         combined = combined.sort_values("scraped_at", ascending=False)
         return combined.head(60).to_dict("records")
 
+    def _load_speed(self, tickers: list[str]) -> dict[str, list]:
+        """Return {ticker: [latest, prev]} comments/hour entries from the registry."""
+        from elephant.ticker_registry import load_cache
+        cache = load_cache(self.tickers_file)
+        result = {}
+        for ticker in tickers:
+            entry = cache.get(ticker)
+            if not entry or not isinstance(entry, dict):
+                continue
+            history = entry.get("speed_history", [])
+            if history:
+                result[ticker] = history[:3]  # keep up to 3 most recent days
+        return result
+
     def _load_prices(self, tickers: list[str]) -> dict[str, dict]:
         if not tickers:
             return {}
@@ -179,23 +193,28 @@ class Synthesizer:
         evaluations: dict[str, dict],
         minkabu: dict[str, str],
         prices: dict[str, dict],
+        speed: dict[str, list],
     ) -> str:
         lines = [f"Today: {datetime.now().strftime('%Y-%m-%d')}", ""]
         lines.append("## BBS Hot Tickers (Yahoo Finance Japan — ranked by discussion volume)")
-        lines.append("Columns: BBS rank | ticker | sentiment | 1-month price change")
+        lines.append("Columns: BBS rank | ticker | sentiment | 1-month price change | comment speed (c/h, newest first)")
         lines.append("")
         for i, ticker in enumerate(tickers[:40], 1):
             ev = evaluations.get(ticker)
             pr = prices.get(ticker)
+            sp = speed.get(ticker)
             sentiment = ""
             if ev:
                 bull = ev["strongest"] + ev["strong"]
                 bear = ev["weak"] + ev["weakest"]
                 sentiment = f"Bull {bull:.0f}% | Neutral {ev['both']:.0f}% | Bear {bear:.0f}%"
-            price_str = ""
-            if pr:
-                price_str = f"| {pr['chg_1mo']:+.1f}% 1mo"
-            lines.append(f"{i:2}. {ticker}  {sentiment}  {price_str}".rstrip())
+            price_str = f"{pr['chg_1mo']:+.1f}% 1mo" if pr else ""
+            speed_str = ""
+            if sp:
+                speed_str = "speed " + " → ".join(f"{h['comments_per_hour']:.1f}" for h in sp)
+            parts = [sentiment, price_str, speed_str]
+            suffix = "  |  ".join(p for p in parts if p)
+            lines.append(f"{i:2}. {ticker}  {suffix}".rstrip())
         if minkabu:
             lines.append("")
             lines.append("## Minkabu アナリストコンセンサス（直近データ）")
@@ -262,6 +281,7 @@ class Synthesizer:
         minkabu = self._load_minkabu(tickers, since)
         news = self._load_news(since)
         prices = self._load_prices(tickers[:40])
+        speed = self._load_speed(tickers[:40])
         date_str = datetime.now().strftime("%Y-%m-%d")
 
         river_context = ""
@@ -279,12 +299,14 @@ class Synthesizer:
 ## 出力フォーマット
 
 以下のヒントタイプから3〜4件、日本語で書いてください：
-- [NEW NAME]: リバーツリーにない銘柄で、BBS活動が異常に高い、または強気センチメントが強い
+- [NEW NAME]: リバーツリーにない銘柄で、BBS活動が異常に高い、コメント速度（c/h）が急加速している、または強気センチメントが強い
 - [HOLDING SIGNAL]: 直近1ヶ月で株価が下落（1mo欄がマイナス）しているにも関わらず、強気センチメントが高い水準を維持している銘柄 — 底堅さの確認価値あり
 - [SECTOR THEME]: 同じセクターの複数銘柄が類似したシグナルを示している
 
+コメント速度（speed欄）の読み方：「最新 → 前日 → 前々日」の順。急加速（例：1.2 → 3.5 → 8.0）は注目に値する。
+
 各ヒント：3〜5行。「→ 注目の価値あり」または「→ 確認の価値あり」で締めること。
-どのシグナルがヒントのトリガーになったか明記（BBS順位、強気比率、Minkabuコンセンサスなど）。
+どのシグナルがヒントのトリガーになったか明記（BBS順位、強気比率、コメント速度、Minkabuコンセンサスなど）。
 リバーツリーにある銘柄はHOLDING SIGNALでない限り提案しないこと。
 トーン：意見ははっきりと、でも謙虚に。「注目の価値あり」であって「買え」ではない。
 ヘッダー行は出力しないこと（=== Elephant Digest... の行は不要）。\
@@ -308,7 +330,7 @@ Tone: opinionated but humble.
 Do NOT output a header line (no === Elephant Digest... line).\
 """
 
-        jp_hints = self._llm(jp_system, self._build_jp_context(tickers, evaluations, minkabu, prices))
+        jp_hints = self._llm(jp_system, self._build_jp_context(tickers, evaluations, minkabu, prices, speed))
         en_hints = self._llm(en_system, self._build_en_context(news))
 
         return (
