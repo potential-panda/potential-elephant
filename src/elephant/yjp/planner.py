@@ -33,7 +33,7 @@ class YahooFinancePlanner(Planner):
             scheduled_at = today.replace(hour=random_min // 60, minute=random_min % 60, second=0, microsecond=0)
             
             # Create a NEW harvester instance for EACH ticker
-            harvester = YahooFinanceHarvester(self.store, ticker)
+            harvester = YahooFinanceHarvester(self.store, ticker, tickers_file=self.tickers_file)
             
             tasks.append(
                 HarvesterTask(

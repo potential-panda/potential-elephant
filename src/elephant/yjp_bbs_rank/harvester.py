@@ -1,5 +1,4 @@
 import asyncio
-import json
 import random
 import re
 from datetime import datetime, timedelta
@@ -9,6 +8,7 @@ from playwright.async_api import async_playwright
 from playwright_stealth import Stealth
 
 from elephant.framework import Harvester, Store
+from elephant.ticker_registry import load_cache, save_cache
 
 BASE_URL = "https://finance.yahoo.co.jp/stocks/ranking/bbs?market=all&term=daily"
 
@@ -86,39 +86,45 @@ class BbsRankHarvester(Harvester):
 
         return {}
 
-    def _cache_path(self) -> Path:
-        return Path(self.tickers_file).with_suffix(".cache.json")
-
-    def _load_cache(self) -> dict[str, str]:
-        path = self._cache_path()
-        if path.exists():
-            try:
-                return json.loads(path.read_text())
-            except Exception:
-                pass
-        return {}
-
     def _update_cache(self, today_tickers: list[str]) -> None:
         today = datetime.now().date()
         cutoff = today - timedelta(days=CACHE_TTL_DAYS)
         today_str = today.isoformat()
+        cutoff_str = cutoff.isoformat()
 
-        cache = self._load_cache()
+        cache = load_cache(self.tickers_file)
 
         # Refresh last_seen for today's ranked tickers
         for ticker in today_tickers:
-            cache[ticker] = today_str
+            entry = cache.get(ticker) or {"speed_history": []}
+            entry["last_seen"] = today_str
+            cache[ticker] = entry
 
-        # Evict entries older than TTL
-        cache = {t: d for t, d in cache.items() if d >= cutoff.isoformat()}
+        # Evict entries older than TTL (compare last_seen date)
+        def _last_seen(entry) -> str:
+            if isinstance(entry, str):
+                return entry
+            return entry.get("last_seen", "")
+
+        cache = {t: e for t, e in cache.items() if _last_seen(e) >= cutoff_str}
+
+        # Prune speed_history entries older than TTL
+        for ticker, entry in cache.items():
+            if isinstance(entry, dict) and "speed_history" in entry:
+                entry["speed_history"] = [
+                    h for h in entry["speed_history"] if h.get("date", "") >= cutoff_str
+                ]
 
         # Cap at max: keep most recently seen, preserving today's rank order first
         if len(cache) > CACHE_MAX_TICKERS:
-            sorted_entries = sorted(cache.items(), key=lambda x: (x[1], today_tickers.index(x[0]) if x[0] in today_tickers else 999), reverse=True)
+            sorted_entries = sorted(
+                cache.items(),
+                key=lambda x: (_last_seen(x[1]), today_tickers.index(x[0]) if x[0] in today_tickers else 999),
+                reverse=True,
+            )
             cache = dict(sorted_entries[:CACHE_MAX_TICKERS])
 
-        # Save cache
-        self._cache_path().write_text(json.dumps(cache, indent=2))
+        save_cache(self.tickers_file, cache)
 
         # Write tickers.txt: today's ranked tickers first, then retained cache tickers
         retained = [t for t in cache if t not in today_tickers]

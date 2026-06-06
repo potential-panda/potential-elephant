@@ -11,6 +11,7 @@ from playwright.async_api import async_playwright
 from playwright_stealth import Stealth
 
 from elephant.framework import Harvester, HarvesterResult, Store
+from elephant.ticker_registry import update_speed
 
 USER_AGENTS = [
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36",
@@ -29,11 +30,12 @@ def generate_id(*args):
 
 
 class YahooFinanceHarvester(Harvester):
-    def __init__(self, store: Store, ticker: str):
+    def __init__(self, store: Store, ticker: str, tickers_file: Optional[str] = None):
         super().__init__(store)
         if not ticker.endswith(".T"):
             ticker = f"{ticker}.T"
         self.ticker = ticker
+        self.tickers_file = tickers_file
         self.latest_ids = self._load_latest_ids()
 
     def _load_latest_ids(self) -> int:
@@ -199,4 +201,9 @@ class YahooFinanceHarvester(Harvester):
                 results["yahoo_comments"] = HarvesterResult(
                     tags={"ticker": self.ticker, "date": scraped_at.strftime("%Y-%m-%d")}, data=all_comments
                 )
+                if self.tickers_file:
+                    try:
+                        update_speed(self.tickers_file, self.ticker, len(all_comments), scraped_at)
+                    except Exception:
+                        pass
             return results

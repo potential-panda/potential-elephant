@@ -25,6 +25,46 @@ The system maintains a **River Tree** — a structured map of instruments across
 
 ---
 
+## How It Works
+
+There are two data sources and one human-in-the-loop workflow that connects them.
+
+### Data Source 1 — Yahoo BBS Pipeline (automated)
+
+```
+BBS Ranking → tickers.txt (LRU cache) → per-ticker scraping → Parquet storage
+```
+
+- **`yjp_bbs_rank`**: scrapes Yahoo Finance JP's daily BBS activity ranking and writes `tickers.txt` — an LRU cache (TTL=7 days, max=300 tickers). The backing `tickers.cache.json` records `last_seen`, `last_scraped_at`, and `speed_history` (comments per hour, one entry per scrape day) for each ticker.
+- **`yahoo_comments` + `yahoo_evaluations`**: for every ticker in `tickers.txt`, scrapes BBS discussion posts and the bull/bear sentiment graph.
+- **`minkabu_raw_html`**: scrapes Minkabu analyst consensus pages for the same tickers.
+- **`news_headlines`**: 7 RSS feeds (NHK Business, Google News — JP economy, semiconductors, AI infra, robotics, biotech, power grid).
+
+All scraped data is stored as Hive-partitioned Parquet under `$DATA_DIR`.
+
+### Data Source 2 — River Tree (manual, human-curated)
+
+```
+You → tree node-add/update/remove → river_tree.json
+```
+
+The River Tree is a structured knowledge database of instruments you've already evaluated and decided to track. It is **never written automatically** — every entry reflects a deliberate decision. You add tickers after a deep dive confirms they belong.
+
+### Workflow — Discovery → Deep Dive → Tree Update
+
+```
+digest (daily hints) ──┐
+discover (scan BBS)  ──┼──► dive --ticker X ──► tree node-add  (or ignore)
+discover --keyword   ──┘
+```
+
+1. **`digest`** runs two LLM calls daily: one on JP sources (BBS rankings + Minkabu, in Japanese) and one on EN sources (news + river tree gaps, in English). Produces 5–7 hints: `[NEW NAME]`, `[HOLDING SIGNAL]`, `[SECTOR THEME]`, `[RIVER GAP]`, `[MACRO OBSERVATION]`.
+2. **`discover`** scans BBS hot tickers not yet in the tree, or searches news by keyword, and uses Claude to classify each ticker into a river and layer.
+3. **`dive --ticker X`** produces a full research brief: company overview, BBS sentiment trend, Minkabu consensus, price context, news mentions, and a river fit verdict (`→ Add to watchlist | → River candidate | → Pass for now`).
+4. You decide. If it belongs, `tree node-add` promotes it into the river.
+
+---
+
 ## Setup
 
 ```bash
@@ -184,6 +224,8 @@ src/elephant/
     seed.py               #   V1 ticker universe (48 instruments, 4 rivers)
 
   synthesizer.py          # Reads all signals + river tree → calls Claude → digest
+  diver.py                # Deep dive brief on a single ticker (price, BBS, Minkabu, news, river fit)
+  ticker_registry.py      # Shared LRU cache: last_seen, last_scraped_at, speed_history per ticker
   query_interface.py      # Pandas helpers for external analysis
 
 src/cli.py                # CLI entry point
@@ -195,7 +237,10 @@ All data lives under `$DATA_DIR` (default: `/panda-infra/elephant`):
 
 ```
 river_tree.json                                      # river tree knowledge database
+tickers.txt                                          # active ticker list (LRU, plain text)
+tickers.cache.json                                   # LRU cache: last_seen, speed_history per ticker
 digests/YYYY-MM-DD.md                               # daily digests
+dives/YYYY-MM-DD-{ticker}.md                        # deep dive briefs
 dataset=yahoo_comments/ticker={t}/date={d}/         # BBS comments
 dataset=yahoo_evaluations/ticker={t}/YEAR={y}/      # BBS buy/sell evaluation
 dataset=minkabu_raw_html/ticker={t}/YEAR={y}/       # Minkabu analyst pages

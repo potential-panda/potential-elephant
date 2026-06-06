@@ -77,7 +77,7 @@ async def fetch_cmd(args):
         try:
             print(f"\n--- Fetching data for {ticker} ---")
             if args.dataset in ["yahoo_comments", "yahoo_evaluations"]:
-                harvester = YahooFinanceHarvester(store, ticker)
+                harvester = YahooFinanceHarvester(store, ticker, tickers_file=TICKERS_FILE)
                 await harvester.start({"max_pages": 1, "max_comments": 20})
             elif args.dataset == "minkabu_raw_html":
                 harvester = MinkabuHarvester(store, ticker)
@@ -246,6 +246,8 @@ def tickers_cmd(args):
     import glob
     from datetime import timedelta
 
+    from elephant.ticker_registry import load_cache
+
     days = args.days
     since = datetime.now() - timedelta(days=days)
     datasets = ["yahoo_comments", "yahoo_evaluations", "minkabu_raw_html"]
@@ -274,6 +276,9 @@ def tickers_cmd(args):
         print(f"No tickers with data in the last {days} days.")
         return
 
+    # Load speed history from registry
+    registry = load_cache(TICKERS_FILE)
+
     # sort by most recently active
     sorted_tickers = sorted(
         ticker_data.items(),
@@ -282,14 +287,21 @@ def tickers_cmd(args):
     )
 
     ds_short = {"yahoo_comments": "comments", "yahoo_evaluations": "eval", "minkabu_raw_html": "minkabu"}
-    print(f"\n{'Ticker':<12} {'Last Active':<14} {'Datasets'}")
-    print("-" * 55)
+    print(f"\n{'Ticker':<12} {'Last Active':<14} {'Speed (c/h)':<14} {'Datasets'}")
+    print("-" * 70)
     for ticker, ds_map in sorted_tickers:
         last = max(ds_map.values()).strftime("%Y-%m-%d")
         datasets_str = "  ".join(
             f"{ds_short[d]}({ds_map[d].strftime('%m-%d')})" for d in datasets if d in ds_map
         )
-        print(f"{ticker:<12} {last:<14} {datasets_str}")
+        entry = registry.get(ticker, {})
+        history = entry.get("speed_history", []) if isinstance(entry, dict) else []
+        if history:
+            recent = history[0]
+            speed_str = f"{recent['comments_per_hour']:.1f} ({recent['date'][5:]})"
+        else:
+            speed_str = "-"
+        print(f"{ticker:<12} {last:<14} {speed_str:<14} {datasets_str}")
 
     print(f"\nTotal: {len(sorted_tickers)} tickers with data in the last {days} days.")
 
