@@ -119,6 +119,37 @@ class Synthesizer:
         combined = combined.sort_values("scraped_at", ascending=False)
         return combined.head(60).to_dict("records")
 
+    def _load_names(self, tickers: list[str]) -> dict[str, str]:
+        import json
+        from concurrent.futures import ThreadPoolExecutor
+        cache_path = os.path.join(self.data_dir, "ticker_names.json")
+        try:
+            cache = json.loads(open(cache_path).read()) if os.path.exists(cache_path) else {}
+        except Exception:
+            cache = {}
+
+        missing = [t for t in tickers if t not in cache]
+        if missing:
+            def fetch(ticker):
+                try:
+                    import yfinance as yf
+                    info = yf.Ticker(ticker).info
+                    return ticker, info.get("shortName") or info.get("longName") or ticker
+                except Exception:
+                    return ticker, ticker
+
+            with ThreadPoolExecutor(max_workers=8) as ex:
+                for ticker, name in ex.map(fetch, missing):
+                    cache[ticker] = name
+
+            try:
+                with open(cache_path, "w") as f:
+                    json.dump(cache, f, ensure_ascii=False, indent=2)
+            except Exception:
+                logging.exception("Failed to save ticker_names.json")
+
+        return cache
+
     def _load_tdnet(self, tickers: list[str], since: datetime) -> list[dict]:
         pattern = os.path.join(self.data_dir, "dataset=tdnet_disclosures", "date=*", "data.parquet")
         files = glob.glob(pattern)
@@ -217,28 +248,29 @@ class Synthesizer:
         minkabu: dict[str, str],
         prices: dict[str, dict],
         speed: dict[str, list],
+        names: dict[str, str],
         tdnet: list[dict],
     ) -> str:
         lines = [f"Today: {datetime.now().strftime('%Y-%m-%d')}", ""]
         lines.append("## BBS Hot Tickers (Yahoo Finance Japan — ranked by discussion volume)")
-        lines.append("Columns: BBS rank | ticker | sentiment | 1-month price change | comment speed (c/h, newest first)")
+        lines.append("Columns: BBS rank | ticker (company name) | sentiment | 1-month price change | comment speed (c/h, newest first)")
         lines.append("")
         for i, ticker in enumerate(tickers[:40], 1):
             ev = evaluations.get(ticker)
             pr = prices.get(ticker)
             sp = speed.get(ticker)
+            name = names.get(ticker, "")
+            label = f"{ticker} ({name})" if name and name != ticker else ticker
             sentiment = ""
             if ev:
                 bull = ev["strongest"] + ev["strong"]
                 bear = ev["weak"] + ev["weakest"]
                 sentiment = f"Bull {bull:.0f}% | Neutral {ev['both']:.0f}% | Bear {bear:.0f}%"
             price_str = f"{pr['chg_1mo']:+.1f}% 1mo" if pr else ""
-            speed_str = ""
-            if sp:
-                speed_str = "speed " + " → ".join(f"{h['comments_per_hour']:.1f}" for h in sp)
+            speed_str = "speed " + " → ".join(f"{h['comments_per_hour']:.1f}" for h in sp) if sp else ""
             parts = [sentiment, price_str, speed_str]
             suffix = "  |  ".join(p for p in parts if p)
-            lines.append(f"{i:2}. {ticker}  {suffix}".rstrip())
+            lines.append(f"{i:2}. {label}  {suffix}".rstrip())
         if tdnet:
             lines.append("")
             lines.append("## 適時開示（TDnet）— 直近48h・監視銘柄のみ")
@@ -311,6 +343,7 @@ class Synthesizer:
         news = self._load_news(since)
         prices = self._load_prices(tickers[:40])
         speed = self._load_speed(tickers[:40])
+        names = self._load_names(tickers[:40])
         tdnet = self._load_tdnet(tickers, since)
         date_str = datetime.now().strftime("%Y-%m-%d")
 
@@ -361,7 +394,7 @@ Tone: opinionated but humble.
 Do NOT output a header line (no === Elephant Digest... line).\
 """
 
-        jp_hints = self._llm(jp_system, self._build_jp_context(tickers, evaluations, minkabu, prices, speed, tdnet))
+        jp_hints = self._llm(jp_system, self._build_jp_context(tickers, evaluations, minkabu, prices, speed, names, tdnet))
         en_hints = self._llm(en_system, self._build_en_context(news))
 
         return (
