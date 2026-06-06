@@ -20,6 +20,8 @@ from elephant.river.tree import FRAMEWORK_RIVERS, RiverTree
 from elephant.tickers import get_tickers
 from elephant.yjp.harvester import YahooFinanceHarvester
 from elephant.yjp.planner import YahooFinancePlanner
+from elephant.tdnet.harvester import TDnetHarvester
+from elephant.tdnet.planner import TDnetPlanner
 from elephant.yjp_bbs_rank.harvester import BbsRankHarvester
 from elephant.yjp_bbs_rank.planner import BbsRankPlanner
 
@@ -65,6 +67,16 @@ async def fetch_cmd(args):
             print("Finished fetching news headlines")
         except Exception:
             logging.exception("Failed to fetch news headlines")
+        return
+
+    if args.dataset == "tdnet_disclosures":
+        try:
+            print("\n--- Fetching TDnet disclosures ---")
+            harvester = TDnetHarvester(store, TICKERS_FILE, lookback_days=1)
+            await harvester.start({})
+            print("Finished fetching TDnet disclosures")
+        except Exception:
+            logging.exception("Failed to fetch TDnet disclosures")
         return
 
     selected_tickers = get_tickers(TICKERS_FILE, num=2)
@@ -539,8 +551,9 @@ def schedule_cmd(args):
     yjp_planner = YahooFinancePlanner(store, TICKERS_FILE)
     minkabu_planner = MinkabuPlanner(store, TICKERS_FILE)
     news_planner = NewsPlanner(store)
+    tdnet_planner = TDnetPlanner(store, TICKERS_FILE)
 
-    multi_planner = MultiPlanner([bbs_rank_planner, yjp_planner, minkabu_planner, news_planner])
+    multi_planner = MultiPlanner([bbs_rank_planner, yjp_planner, minkabu_planner, news_planner, tdnet_planner])
     scheduler = Scheduler(multi_planner)
 
     if args.dry_run:
@@ -554,6 +567,8 @@ def schedule_cmd(args):
                 label = f"{task.harvester.ticker} (Minkabu)"
             elif isinstance(task.harvester, NewsHarvester):
                 label = "News Headlines (RSS)"
+            elif isinstance(task.harvester, TDnetHarvester):
+                label = "TDnet Disclosures"
             else:
                 label = "BBS Rank Update"
             print(f"{task.scheduled_at.strftime('%H:%M')} - {label}")
@@ -574,7 +589,7 @@ def main():
     fetch_parser = subparsers.add_parser("fetch", help="Fetch data for testing")
     fetch_parser.add_argument(
         "--dataset",
-        choices=["yahoo_comments", "yahoo_evaluations", "minkabu_raw_html", "yjp_bbs_rank", "news_headlines"],
+        choices=["yahoo_comments", "yahoo_evaluations", "minkabu_raw_html", "yjp_bbs_rank", "news_headlines", "tdnet_disclosures"],
         required=True,
     )
 
