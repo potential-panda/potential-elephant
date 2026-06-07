@@ -5,6 +5,7 @@ from datetime import datetime, timedelta
 import pandas as pd
 
 DATA_DIR = "/panda-infra/elephant"
+NEWS_DAYS = 5  # match harvester.py
 DATASETS = ["yahoo_comments", "yahoo_evaluations", "minkabu_raw_html", "news_headlines", "tdnet_disclosures"]
 
 
@@ -63,8 +64,10 @@ def query_dataset(dataset: str, ticker: str = None, keyword: str = None, limit: 
         if not dfs:
             return []
         df = pd.concat(dfs, ignore_index=True)
-        df["scraped_at"] = pd.to_datetime(df["scraped_at"])
-        df = df.sort_values("scraped_at", ascending=False)
+        cutoff = datetime.now() - timedelta(days=NEWS_DAYS)
+        df["published_dt"] = pd.to_datetime(df["published"], errors="coerce", utc=True)
+        df = df[df["published_dt"].isna() | (df["published_dt"] >= pd.Timestamp(cutoff, tz="UTC"))]
+        df = df.sort_values("published_dt", ascending=False)
         if keyword:
             mask = df["title"].str.contains(keyword, case=False, na=False)
             if "summary" in df.columns:

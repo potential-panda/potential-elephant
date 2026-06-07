@@ -1,7 +1,8 @@
 import asyncio
+import calendar
 import hashlib
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 
 import feedparser
 
@@ -47,6 +48,7 @@ RSS_FEEDS = [
 ]
 
 MAX_ITEMS_PER_FEED = 20
+NEWS_DAYS = 5  # ignore articles older than this
 
 
 def _generate_id(url: str) -> str:
@@ -69,6 +71,7 @@ class NewsHarvester(Harvester):
             try:
                 # feedparser is synchronous — offload to thread to avoid blocking the loop
                 feed = await asyncio.to_thread(feedparser.parse, feed_config["url"])
+                cutoff = datetime.now(tz=timezone.utc) - timedelta(days=NEWS_DAYS)
                 for entry in feed.entries[:MAX_ITEMS_PER_FEED]:
                     title = (entry.get("title") or "").strip()
                     link = (entry.get("link") or "").strip()
@@ -77,6 +80,12 @@ class NewsHarvester(Harvester):
 
                     if not title or not link:
                         continue
+
+                    pub_parsed = entry.get("published_parsed") or entry.get("updated_parsed")
+                    if pub_parsed:
+                        pub_dt = datetime.fromtimestamp(calendar.timegm(pub_parsed), tz=timezone.utc)
+                        if pub_dt < cutoff:
+                            continue
 
                     all_items.append(
                         {
