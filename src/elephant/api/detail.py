@@ -4,13 +4,15 @@ from datetime import datetime, timedelta
 
 import pandas as pd
 
+from elephant.ticker_registry import normalize_ticker
+
 DATA_DIR = "/panda-infra/elephant"
 
 
 def _normalize(ticker: str) -> tuple[str, str]:
-    if ticker.endswith(".T"):
-        return ticker, ticker[:-2]
-    return f"{ticker}.T", ticker
+    full = normalize_ticker(ticker.strip())
+    bare = full[:-2] if full.endswith(".T") else full
+    return full, bare
 
 
 def get_detail(ticker_raw: str) -> dict:

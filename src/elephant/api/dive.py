@@ -58,8 +58,8 @@ def run_dive(job_id: str, ticker: str) -> None:
 
 
 def start_dive(ticker: str) -> str:
-    if not ticker.endswith(".T"):
-        ticker = f"{ticker}.T"
+    from elephant.ticker_registry import normalize_ticker
+    ticker = normalize_ticker(ticker)
     job_id = str(uuid.uuid4())
     t = threading.Thread(target=run_dive, args=(job_id, ticker), daemon=True)
     t.start()

@@ -21,6 +21,16 @@ from datetime import datetime
 from pathlib import Path
 
 
+def normalize_ticker(ticker: str) -> str:
+    """Add .T suffix only for numeric Tokyo Stock Exchange codes (e.g. '8105' → '8105.T').
+    Alphabetic tickers (AMZN, VST) are left unchanged."""
+    if "." in ticker:
+        return ticker  # already has exchange suffix
+    if ticker.isdigit():
+        return f"{ticker}.T"
+    return ticker
+
+
 def _cache_path(tickers_file: str) -> Path:
     return Path(tickers_file).with_suffix(".cache.json")
 

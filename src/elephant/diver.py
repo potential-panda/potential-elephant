@@ -38,10 +38,10 @@ class Diver:
     # --- Data loaders ---
 
     def _normalise(self, ticker: str) -> tuple[str, str]:
-        """Return (ticker_with_T, ticker_without_T)."""
-        if ticker.endswith(".T"):
-            return ticker, ticker[:-2]
-        return f"{ticker}.T", ticker
+        from elephant.ticker_registry import normalize_ticker
+        full = normalize_ticker(ticker)
+        bare = full[:-2] if full.endswith(".T") else full
+        return full, bare
 
     def _load_price(self, ticker: str) -> dict:
         try:
@@ -272,7 +272,8 @@ class Diver:
         )
 
     def dive(self, ticker: str) -> str:
-        ticker_t = ticker if ticker.endswith(".T") else f"{ticker}.T"
+        from elephant.ticker_registry import normalize_ticker
+        ticker_t = normalize_ticker(ticker)
         context = self._build_context(ticker)
         date_str = datetime.now().strftime("%Y-%m-%d")
 

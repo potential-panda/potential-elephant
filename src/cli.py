@@ -156,8 +156,8 @@ def query_cmd(args):
     if not ticker:
         print("--ticker is required for this dataset.")
         return
-    if not ticker.endswith(".T"):
-        ticker = f"{ticker}.T"
+    from elephant.ticker_registry import normalize_ticker
+    ticker = normalize_ticker(ticker)
 
     path_pattern = os.path.join(DATA_DIR, f"dataset={args.dataset}", f"ticker={ticker}", "**", "data.parquet")
     files = glob.glob(path_pattern, recursive=True)

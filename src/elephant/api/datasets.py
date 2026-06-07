@@ -77,8 +77,8 @@ def query_dataset(dataset: str, ticker: str = None, keyword: str = None, limit: 
 
     if not ticker:
         return []
-    if not ticker.endswith(".T"):
-        ticker = f"{ticker}.T"
+    from elephant.ticker_registry import normalize_ticker
+    ticker = normalize_ticker(ticker)
 
     pattern = os.path.join(DATA_DIR, f"dataset={dataset}", f"ticker={ticker}", "**", "data.parquet")
     files = glob.glob(pattern, recursive=True)

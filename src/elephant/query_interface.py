@@ -9,8 +9,8 @@ EVAL_DIR = os.path.join(DATA_DIR, "dataset=yahoo_evaluations")
 
 
 def get_comments_for_analysis(ticker: str, start_date: str, end_date: str) -> pd.DataFrame:
-    if not ticker.endswith(".T"):
-        ticker = f"{ticker}.T"
+    from elephant.ticker_registry import normalize_ticker
+    ticker = normalize_ticker(ticker)
     con = duckdb.connect(database=":memory:")
     path_pattern = os.path.join(COMMENTS_DIR, f"ticker={ticker}", "date=*", "data.parquet")
     import glob
@@ -31,8 +31,8 @@ def get_comments_for_analysis(ticker: str, start_date: str, end_date: str) -> pd
 
 
 def get_evaluations_for_analysis(ticker: str, start_year: str, end_year: str) -> pd.DataFrame:
-    if not ticker.endswith(".T"):
-        ticker = f"{ticker}.T"
+    from elephant.ticker_registry import normalize_ticker
+    ticker = normalize_ticker(ticker)
     con = duckdb.connect(database=":memory:")
     path_pattern = os.path.join(EVAL_DIR, f"ticker={ticker}", "YEAR=*", "data.parquet")
     import glob
