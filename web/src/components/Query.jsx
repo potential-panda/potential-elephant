@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { queryDataset } from '../api'
+import StorageFooter from './StorageFooter'
 
 const DATASETS = [
   { value: 'yahoo_comments', label: 'Yahoo Comments', hasTicker: true, hasKeyword: false },
@@ -207,6 +208,7 @@ export default function Query() {
   const [error, setError] = useState(null)
   const [results, setResults] = useState(null)
   const [queried, setQueried] = useState(null)
+  const [dataDir, setDataDir] = useState(null)
 
   useEffect(() => {
     const onHashChange = () => setDataset(datasetFromHash())
@@ -233,8 +235,9 @@ export default function Query() {
 
     queryDataset(params)
       .then((data) => {
-        setResults(data)
+        setResults(data.items)
         setQueried(dataset)
+        setDataDir(data.data_dir ?? null)
       })
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false))
@@ -332,6 +335,8 @@ export default function Query() {
           <ResultsTable dataset={queried} records={results} />
         </div>
       )}
+
+      <StorageFooter paths={dataDir} />
     </div>
   )
 }

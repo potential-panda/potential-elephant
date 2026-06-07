@@ -58,4 +58,8 @@ def get_tickers() -> list[dict]:
         })
 
     result.sort(key=lambda x: (x["bbs_rank"] or 9999))
-    return result
+    return {
+        "items": result,
+        "tickers_file": TICKERS_FILE,
+        "cache_file": TICKERS_FILE.replace("tickers.txt", "tickers.cache.json"),
+    }

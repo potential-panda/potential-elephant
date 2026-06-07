@@ -127,7 +127,8 @@ def api_query(
     keyword: str = Query(None),
     limit: int = Query(50),
 ):
-    return datasets.query_dataset(dataset, ticker=ticker, keyword=keyword, limit=limit)
+    rows = datasets.query_dataset(dataset, ticker=ticker, keyword=keyword, limit=limit)
+    return {"items": rows, "data_dir": datasets.DATA_DIR}
 
 
 # --- Serve frontend ---

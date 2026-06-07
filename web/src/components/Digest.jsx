@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { getDigestLatest, getDigestList, getDigestByDate, generateDigest, getJob } from '../api'
+import StorageFooter from './StorageFooter'
 
 function Spinner({ small }) {
   return (
@@ -199,15 +200,7 @@ export default function Digest() {
         )}
       </div>
 
-      {/* Storage path */}
-      {storageDir && (
-        <div className="mt-6 pt-4 border-t border-slate-800">
-          <p className="text-xs text-slate-600">
-            Stored at{' '}
-            <span className="font-mono text-slate-500">{storageDir}</span>
-          </p>
-        </div>
-      )}
+      <StorageFooter paths={storageDir} />
     </div>
   )
 }

@@ -9,7 +9,7 @@ NEWS_DAYS = 5  # match harvester.py
 DATASETS = ["yahoo_comments", "yahoo_evaluations", "minkabu_raw_html", "news_headlines", "tdnet_disclosures"]
 
 
-def get_stats() -> list[dict]:
+def get_stats() -> dict:
     results = []
     for dataset in DATASETS:
         pattern = os.path.join(DATA_DIR, f"dataset={dataset}", "**", "data.parquet")
@@ -48,7 +48,7 @@ def get_stats() -> list[dict]:
             "earliest": earliest_date.isoformat() if earliest_date else None,
         })
 
-    return results
+    return {"items": results, "data_dir": DATA_DIR}
 
 
 def query_dataset(dataset: str, ticker: str = None, keyword: str = None, limit: int = 50) -> list[dict]:

@@ -31,9 +31,11 @@ def get_status() -> dict:
             "state": f"{active} ({sub})",
             "pid": int(pid) if pid.isdigit() else None,
             "since": since,
+            "log_file": "/panda-infra/elephant/scheduler.log",
         }
     except Exception as e:
-        return {"active": False, "state": "error", "pid": None, "since": None, "error": str(e)}
+        return {"active": False, "state": "error", "pid": None, "since": None,
+                "error": str(e), "log_file": "/panda-infra/elephant/scheduler.log"}
 
 
 def get_dry_run_plan() -> list[dict]:

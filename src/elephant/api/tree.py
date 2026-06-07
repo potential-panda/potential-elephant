@@ -24,4 +24,5 @@ def get_tree() -> dict:
             "description": getattr(river, "description", ""),
             "nodes": nodes,
         })
-    return {"rivers": rivers, "layers": LAYERS}
+    tree_file = os.path.join(DATA_DIR, "river_tree.json")
+    return {"rivers": rivers, "layers": LAYERS, "file": tree_file}

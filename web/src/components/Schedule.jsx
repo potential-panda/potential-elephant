@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { getScheduleStatus, getSchedulePlan } from '../api'
+import StorageFooter from './StorageFooter'
 
 function Spinner() {
   return (
@@ -122,6 +123,8 @@ export default function Schedule() {
           </div>
         )}
       </div>
+
+      <StorageFooter paths={status?.log_file} />
     </div>
   )
 }

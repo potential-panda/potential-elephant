@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { getTickers } from '../api'
+import StorageFooter from './StorageFooter'
 
 function Sparkline({ history }) {
   if (!history || history.length === 0) return <span className="text-slate-600">—</span>
@@ -141,13 +142,14 @@ function TickerPanel({ ticker, onClose }) {
 
 export default function Tickers() {
   const [tickers, setTickers] = useState([])
+  const [meta, setMeta] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [selected, setSelected] = useState(null)
 
   useEffect(() => {
     getTickers()
-      .then((data) => setTickers(data))
+      .then((data) => { setTickers(data.items); setMeta(data) })
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false))
   }, [])
@@ -228,6 +230,8 @@ export default function Tickers() {
       {selected && (
         <TickerPanel ticker={selected} onClose={() => setSelected(null)} />
       )}
+
+      <StorageFooter paths={[meta?.tickers_file, meta?.cache_file].filter(Boolean)} />
     </div>
   )
 }

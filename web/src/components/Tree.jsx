@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { getTree } from '../api'
+import StorageFooter from './StorageFooter'
 
 const LAYER_COLORS = {
   source: 'bg-purple-900/50 text-purple-300 border-purple-700/50',
@@ -144,6 +145,8 @@ export default function Tree() {
           <RiverSection key={river.id} river={river} layers={layers} />
         ))
       )}
+
+      <StorageFooter paths={tree.file} />
     </div>
   )
 }

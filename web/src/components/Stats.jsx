@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { getStats } from '../api'
+import StorageFooter from './StorageFooter'
 
 function Spinner() {
   return (
@@ -78,12 +79,13 @@ function StatCard({ stat }) {
 
 export default function Stats() {
   const [stats, setStats] = useState([])
+  const [dataDir, setDataDir] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
 
   useEffect(() => {
     getStats()
-      .then((d) => setStats(d))
+      .then((d) => { setStats(d.items); setDataDir(d.data_dir) })
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false))
   }, [])
@@ -120,6 +122,8 @@ export default function Stats() {
           ))}
         </div>
       )}
+
+      <StorageFooter paths={dataDir} />
     </div>
   )
 }
