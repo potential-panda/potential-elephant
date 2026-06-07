@@ -70,7 +70,10 @@ def get_detail(ticker_raw: str) -> dict:
             if not df.empty:
                 raw = str(df.iloc[0].get("analyst_consensus", ""))
                 text = _strip_html(raw).strip()
-                result["minkabu"] = text[:3000] if len(text) > 50 else None
+                if len(text) > 50 and "ページが見つかりませんでした" not in text:
+                    result["minkabu"] = text[:3000]
+                else:
+                    result["minkabu"] = None
             else:
                 result["minkabu"] = None
         except Exception:

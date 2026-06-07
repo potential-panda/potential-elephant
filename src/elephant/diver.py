@@ -122,7 +122,9 @@ class Diver:
                 return ""
             latest = df.iloc[0]
             text = _strip_html(str(latest.get("analyst_consensus", "")))
-            return text[:2000] if len(text) > 100 else ""
+            if len(text) > 100 and "ページが見つかりませんでした" not in text:
+                return text[:2000]
+            return ""
         except Exception:
             return ""
 
