@@ -45,6 +45,14 @@ def api_digest_list():
     return digest.list_digests()
 
 
+@app.get("/api/digest/{date}")
+def api_digest_by_date(date: str):
+    result = digest.get_by_date(date)
+    if not result:
+        raise HTTPException(status_code=404, detail="Digest not found")
+    return result
+
+
 @app.post("/api/digest/generate")
 def api_digest_generate():
     job_id = digest.start_generate()

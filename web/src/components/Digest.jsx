@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { getDigestLatest, getDigestList, generateDigest, getJob } from '../api'
+import { getDigestLatest, getDigestList, getDigestByDate, generateDigest, getJob } from '../api'
 
 function Spinner({ small }) {
   return (
@@ -60,6 +60,7 @@ function DigestContent({ content }) {
 export default function Digest() {
   const [digest, setDigest] = useState(null)
   const [digestList, setDigestList] = useState([])
+  const [selectedDate, setSelectedDate] = useState(null)
   const [loading, setLoading] = useState(true)
   const [listLoading, setListLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -69,7 +70,7 @@ export default function Digest() {
 
   const fetchLatest = () =>
     getDigestLatest()
-      .then((d) => setDigest(d))
+      .then((d) => { setDigest(d); setSelectedDate(d.date) })
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false))
 
@@ -83,6 +84,17 @@ export default function Digest() {
     fetchLatest()
     fetchList()
   }, [])
+
+  const handleSelectDate = (date) => {
+    if (date === selectedDate) return
+    setSelectedDate(date)
+    setLoading(true)
+    setError(null)
+    getDigestByDate(date)
+      .then((d) => setDigest(d))
+      .catch((e) => setError(e.message))
+      .finally(() => setLoading(false))
+  }
 
   const handleGenerate = () => {
     setGenerating(true)
@@ -119,6 +131,8 @@ export default function Digest() {
 
   useEffect(() => () => clearInterval(pollRef.current), [])
 
+  const storageDir = digest?.storage_dir ?? null
+
   return (
     <div>
       <div className="flex items-center justify-between mb-4">
@@ -136,11 +150,11 @@ export default function Digest() {
           {generating && (
             <div className="w-3 h-3 border-t-2 border-white/70 rounded-full animate-spin" />
           )}
-          {generating ? 'Generating...' : 'Regenerate'}
+          {generating ? 'Generating...' : 'Generate'}
         </button>
       </div>
 
-      {genError && <ErrorMsg msg={genError} />}
+      {genError && <div className="mb-4"><ErrorMsg msg={genError} /></div>}
 
       {loading ? (
         <Spinner />
@@ -164,22 +178,36 @@ export default function Digest() {
         ) : (
           <div className="bg-slate-900 border border-slate-800 rounded-lg overflow-hidden">
             {digestList.map((d, i) => (
-              <div
+              <button
                 key={d.date}
+                onClick={() => handleSelectDate(d.date)}
                 className={[
-                  'flex items-center justify-between px-4 py-2.5 text-sm',
+                  'w-full flex items-center justify-between px-4 py-2.5 text-sm text-left transition-colors',
                   i !== digestList.length - 1 ? 'border-b border-slate-800' : '',
+                  selectedDate === d.date
+                    ? 'bg-slate-800 text-emerald-400'
+                    : 'hover:bg-slate-800/60 text-slate-300',
                 ].join(' ')}
               >
-                <span className="font-mono text-slate-300">{d.date}</span>
+                <span className="font-mono">{d.date}</span>
                 <span className="text-slate-600 text-xs font-mono">
                   {d.size != null ? `${(d.size / 1024).toFixed(1)} KB` : '—'}
                 </span>
-              </div>
+              </button>
             ))}
           </div>
         )}
       </div>
+
+      {/* Storage path */}
+      {storageDir && (
+        <div className="mt-6 pt-4 border-t border-slate-800">
+          <p className="text-xs text-slate-600">
+            Stored at{' '}
+            <span className="font-mono text-slate-500">{storageDir}</span>
+          </p>
+        </div>
+      )}
     </div>
   )
 }

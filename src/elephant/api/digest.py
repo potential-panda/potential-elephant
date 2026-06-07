@@ -10,22 +10,41 @@ TICKERS_FILE = "/panda-infra/elephant/tickers.txt"
 _jobs: dict[str, dict] = {}
 
 
+DIGESTS_DIR = Path(DATA_DIR) / "digests"
+
+
+def _digest_path() -> Path:
+    return DIGESTS_DIR
+
+
 def get_latest() -> dict | None:
-    digests_dir = Path(DATA_DIR) / "digests"
-    files = sorted(digests_dir.glob("*.md"), reverse=True)
+    files = sorted(DIGESTS_DIR.glob("*.md"), reverse=True)
     if not files:
         return None
     f = files[0]
     return {
         "date": f.stem,
         "content": f.read_text(encoding="utf-8"),
+        "path": str(f),
+        "storage_dir": str(DIGESTS_DIR),
+    }
+
+
+def get_by_date(date: str) -> dict | None:
+    f = DIGESTS_DIR / f"{date}.md"
+    if not f.exists():
+        return None
+    return {
+        "date": f.stem,
+        "content": f.read_text(encoding="utf-8"),
+        "path": str(f),
+        "storage_dir": str(DIGESTS_DIR),
     }
 
 
 def list_digests() -> list[dict]:
-    digests_dir = Path(DATA_DIR) / "digests"
     result = []
-    for f in sorted(digests_dir.glob("*.md"), reverse=True):
+    for f in sorted(DIGESTS_DIR.glob("*.md"), reverse=True):
         result.append({"date": f.stem, "size": f.stat().st_size})
     return result
 
@@ -40,10 +59,9 @@ def generate_digest(job_id: str) -> None:
         synth = Synthesizer(DATA_DIR, TICKERS_FILE, tree=tree)
         digest = synth.generate()
 
-        digests_dir = Path(DATA_DIR) / "digests"
-        digests_dir.mkdir(exist_ok=True)
+        DIGESTS_DIR.mkdir(exist_ok=True)
         date_str = datetime.now().strftime("%Y-%m-%d")
-        (digests_dir / f"{date_str}.md").write_text(digest, encoding="utf-8")
+        (DIGESTS_DIR / f"{date_str}.md").write_text(digest, encoding="utf-8")
 
         _jobs[job_id] = {"status": "done", "result": digest, "error": None}
     except Exception as e:

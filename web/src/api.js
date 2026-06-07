@@ -14,6 +14,7 @@ export const getTickers = () => apiFetch('/tickers')
 
 export const getDigestLatest = () => apiFetch('/digest/latest')
 export const getDigestList = () => apiFetch('/digest/list')
+export const getDigestByDate = (date) => apiFetch(`/digest/${date}`)
 export const generateDigest = () =>
   apiFetch('/digest/generate', { method: 'POST', body: '{}' })
 
