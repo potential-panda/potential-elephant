@@ -32,8 +32,8 @@ function CommentsTable({ records }) {
       <thead>
         <tr className="border-b border-slate-800 text-slate-500 text-xs uppercase tracking-wider">
           <th className="text-left px-3 py-2 w-40">DateTime</th>
-          <th className="text-left px-3 py-2 w-32">Author</th>
           <th className="text-left px-3 py-2">Body</th>
+          <th className="text-left px-3 py-2 w-32">Author</th>
         </tr>
       </thead>
       <tbody>
@@ -42,8 +42,8 @@ function CommentsTable({ records }) {
             <td className="px-3 py-2 text-slate-500 font-mono align-top whitespace-nowrap">
               {r.post_datetime ?? '—'}
             </td>
-            <td className="px-3 py-2 text-slate-400 align-top whitespace-nowrap">{r.author ?? '—'}</td>
             <td className="px-3 py-2 text-slate-300 align-top leading-relaxed">{r.body ?? '—'}</td>
+            <td className="px-3 py-2 text-slate-400 align-top whitespace-nowrap">{r.author ?? '—'}</td>
           </tr>
         ))}
       </tbody>
