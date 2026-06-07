@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import Layout from './components/Layout'
 import Tickers from './components/Tickers'
 import Digest from './components/Digest'
@@ -18,13 +18,29 @@ const TAB_COMPONENTS = {
   stats: Stats,
 }
 
+function tabFromHash() {
+  const hash = window.location.hash.slice(1)
+  return TAB_COMPONENTS[hash] ? hash : 'tickers'
+}
+
 export default function App() {
-  const [activeTab, setActiveTab] = useState('tickers')
+  const [activeTab, setActiveTab] = useState(tabFromHash)
+
+  useEffect(() => {
+    const onHashChange = () => setActiveTab(tabFromHash())
+    window.addEventListener('hashchange', onHashChange)
+    return () => window.removeEventListener('hashchange', onHashChange)
+  }, [])
+
+  const handleTabChange = (tab) => {
+    window.location.hash = tab
+    setActiveTab(tab)
+  }
 
   const ActiveComponent = TAB_COMPONENTS[activeTab] || Tickers
 
   return (
-    <Layout activeTab={activeTab} onTabChange={setActiveTab}>
+    <Layout activeTab={activeTab} onTabChange={handleTabChange}>
       <ActiveComponent />
     </Layout>
   )
