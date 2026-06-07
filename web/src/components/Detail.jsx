@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react'
-import { getDetail, getTickers } from '../api'
+import { useState, useEffect, useRef } from 'react'
+import { getDetail, getTickers, startDive, getJob } from '../api'
 
 function Spinner() {
   return (
@@ -241,6 +241,9 @@ export default function Detail() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
   const [knownTickers, setKnownTickers] = useState([])
+  const [diving, setDiving] = useState(false)
+  const [diveError, setDiveError] = useState(null)
+  const pollRef = useRef(null)
 
   // populate autocomplete list
   useEffect(() => {
@@ -278,6 +281,38 @@ export default function Detail() {
     window.location.hash = `detail/${t}`
     setTicker(t)
   }
+
+  const handleDive = () => {
+    if (!ticker) return
+    setDiving(true)
+    setDiveError(null)
+    startDive(ticker)
+      .then(({ job_id }) => {
+        pollRef.current = setInterval(() => {
+          getJob(job_id)
+            .then((job) => {
+              if (job.status === 'done') {
+                clearInterval(pollRef.current)
+                setDiving(false)
+                // Reload the full detail to show the new dive
+                getDetail(ticker).then(setData).catch(() => {})
+              } else if (job.status === 'error') {
+                clearInterval(pollRef.current)
+                setDiving(false)
+                setDiveError(job.error || 'Dive failed')
+              }
+            })
+            .catch((e) => {
+              clearInterval(pollRef.current)
+              setDiving(false)
+              setDiveError(e.message)
+            })
+        }, 2000)
+      })
+      .catch((e) => { setDiving(false); setDiveError(e.message) })
+  }
+
+  useEffect(() => () => clearInterval(pollRef.current), [])
 
   return (
     <div>
@@ -322,7 +357,22 @@ export default function Detail() {
 
       {data && !loading && (
         <div>
-          <SectionHeader title="Deep Dive" />
+          <div className="flex items-center justify-between mb-3 mt-8 first:mt-0">
+            <h3 className="text-sm font-semibold text-slate-400 uppercase tracking-wider">Deep Dive</h3>
+            <button
+              onClick={handleDive}
+              disabled={diving}
+              className="flex items-center gap-2 px-3 py-1.5 bg-emerald-700 hover:bg-emerald-600 disabled:bg-slate-700 disabled:text-slate-500 text-white text-xs font-medium rounded transition-colors"
+            >
+              {diving && <div className="w-3 h-3 border-t-2 border-white/70 rounded-full animate-spin" />}
+              {diving ? 'Diving...' : 'Deep Dive'}
+            </button>
+          </div>
+          {diveError && (
+            <div className="text-red-400 bg-red-950/30 border border-red-800/50 rounded px-3 py-2 text-xs mb-3">
+              {diveError}
+            </div>
+          )}
           <DiveSection dive={data.dive} />
 
           <SectionHeader title="Yahoo Comments" />
