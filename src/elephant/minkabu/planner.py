@@ -8,12 +8,13 @@ from elephant.tickers import get_tickers
 
 
 class MinkabuPlanner(Planner):
-    def __init__(self, store: Store, tickers_file: str):
+    def __init__(self, store: Store, tickers_file: str, tree_path: str = None):
         self.store = store
         self.tickers_file = tickers_file
+        self.tree_path = tree_path
 
     def create(self) -> List[HarvesterTask]:
-        tickers = get_tickers(self.tickers_file)
+        tickers = get_tickers(self.tickers_file, tree_path=self.tree_path)
         if not tickers:
             return []
 

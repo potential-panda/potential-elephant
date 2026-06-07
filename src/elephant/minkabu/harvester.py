@@ -21,11 +21,12 @@ class MinkabuHarvester(Harvester):
         super().__init__(store)
         from elephant.ticker_registry import normalize_ticker
         self.ticker = normalize_ticker(ticker)
-        self.minkabu_ticker = self.ticker.replace(".T", "") if self.ticker.endswith(".T") else self.ticker
+        self.is_jp = self.ticker.endswith(".T")
+        self.minkabu_ticker = self.ticker.replace(".T", "") if self.is_jp else self.ticker
+        self.minkabu_base = "https://minkabu.jp" if self.is_jp else "https://us.minkabu.jp"
 
     def get_url(self, params: dict) -> str:
-        # This harvester visits multiple URLs, so we return the base one for reference
-        return f"https://minkabu.jp/stock/{self.minkabu_ticker}"
+        return f"{self.minkabu_base}/stock/{self.minkabu_ticker}"
 
     def _clean_html(self, html: str) -> str:
         """Remove noise to save tokens/storage for later LLM parsing."""
@@ -82,7 +83,7 @@ class MinkabuHarvester(Harvester):
 
             found_any = False
             for sub in sub_pages:
-                target_url = f"https://minkabu.jp/stock/{self.minkabu_ticker}/{sub}"
+                target_url = f"{self.minkabu_base}/stock/{self.minkabu_ticker}/{sub}"
                 content = await self._get_page_content(page, target_url)
                 data_record[sub] = content if content else ""
                 if content:

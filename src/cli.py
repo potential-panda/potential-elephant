@@ -548,8 +548,8 @@ def schedule_cmd(args):
     store = Store(DATA_DIR)
 
     bbs_rank_planner = BbsRankPlanner(store, TICKERS_FILE)
-    yjp_planner = YahooFinancePlanner(store, TICKERS_FILE)
-    minkabu_planner = MinkabuPlanner(store, TICKERS_FILE)
+    yjp_planner = YahooFinancePlanner(store, TICKERS_FILE, tree_path=TREE_PATH)
+    minkabu_planner = MinkabuPlanner(store, TICKERS_FILE, tree_path=TREE_PATH)
     news_planner = NewsPlanner(store)
     tdnet_planner = TDnetPlanner(store)
 

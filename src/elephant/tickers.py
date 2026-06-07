@@ -1,20 +1,37 @@
+import json
 import logging
 import os
 import random
 
 
-def get_tickers(tickers_file: str, num: int = None):
+def get_tickers(tickers_file: str, num: int = None, tree_path: str = None):
     """
-    Read tickers from a file.
-    If num is provided, return num random tickers.
-    Otherwise, return all tickers.
+    Read tickers from a file, optionally merged with river tree nodes.
+    If num is provided, return num random tickers from the merged set.
     """
-    if not os.path.exists(tickers_file):
-        logging.error(f"{tickers_file} not found.")
-        return []
+    from elephant.ticker_registry import normalize_ticker
 
-    with open(tickers_file, "r") as f:
-        tickers = [line.strip() for line in f if line.strip()]
+    tickers: list[str] = []
+
+    if os.path.exists(tickers_file):
+        with open(tickers_file, "r") as f:
+            tickers = [line.strip() for line in f if line.strip()]
+    else:
+        logging.error(f"{tickers_file} not found.")
+
+    if tree_path and os.path.exists(tree_path):
+        try:
+            with open(tree_path, encoding="utf-8") as f:
+                data = json.load(f)
+            tree_tickers = {
+                normalize_ticker(node["ticker"])
+                for river in data.get("rivers", [])
+                for node in river.get("nodes", [])
+            }
+            existing = set(tickers)
+            tickers = tickers + [t for t in sorted(tree_tickers) if t not in existing]
+        except Exception:
+            logging.exception(f"Failed to load river tree tickers from {tree_path}")
 
     if num is not None:
         return random.sample(tickers, min(num, len(tickers)))
