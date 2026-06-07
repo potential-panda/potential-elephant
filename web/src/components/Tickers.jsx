@@ -67,7 +67,6 @@ function SortIcon({ active, dir }) {
 }
 
 const COLS = [
-  { id: 'bbs_rank',      label: 'Rank' },
   { id: 'ticker',        label: 'Ticker' },
   { id: 'last_seen',     label: 'Last Seen' },
   { id: 'last_scraped',  label: 'Last Scraped' },
@@ -76,7 +75,6 @@ const COLS = [
 
 function sortVal(t, col) {
   switch (col) {
-    case 'bbs_rank':     return t.bbs_rank ?? 9999
     case 'ticker':       return t.ticker ?? ''
     case 'last_seen':    return t.last_seen ?? ''
     case 'last_scraped': return t.last_scraped_at ?? ''
@@ -93,7 +91,7 @@ export default function Tickers() {
   const [meta, setMeta] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
-  const [sortCol, setSortCol] = useState('bbs_rank')
+  const [sortCol, setSortCol] = useState('ticker')
   const [sortDir, setSortDir] = useState('asc')
 
   useEffect(() => {
@@ -162,9 +160,6 @@ export default function Tickers() {
                     'hover:bg-slate-800/50',
                   ].join(' ')}
                 >
-                  <td className="px-4 py-2.5 text-slate-500 font-mono">
-                    {t.bbs_rank ?? '—'}
-                  </td>
                   <td className="px-4 py-2.5 font-semibold font-mono">
                     <a
                       href={`#detail/${t.ticker}`}
