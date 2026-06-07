@@ -263,13 +263,19 @@ class Diver:
 
     def _links_section(self, ticker_t: str) -> str:
         bare = ticker_t.replace(".T", "")
-        return (
-            "\n\n---\n## Links\n"
-            f"- [Yahoo Finance BBS](https://finance.yahoo.co.jp/quote/{ticker_t}/forum)\n"
-            f"- [Yahoo Finance Quote](https://finance.yahoo.co.jp/quote/{ticker_t})\n"
-            f"- [Minkabu](https://minkabu.jp/stock/{bare})\n"
-            f"- [TDnet](https://www.release.tdnet.info/)\n"
-        )
+        is_jp = ticker_t.endswith(".T")
+        minkabu_url = f"https://minkabu.jp/stock/{bare}" if is_jp else f"https://us.minkabu.jp/stock/{bare}"
+        lines = ["", "", "---", "## Links"]
+        if is_jp:
+            lines += [
+                f"- [Yahoo Finance BBS](https://finance.yahoo.co.jp/quote/{ticker_t}/forum)",
+                f"- [Yahoo Finance Quote](https://finance.yahoo.co.jp/quote/{ticker_t})",
+                f"- [TDnet](https://www.release.tdnet.info/)",
+            ]
+        else:
+            lines.append(f"- [Yahoo Finance](https://finance.yahoo.com/quote/{ticker_t})")
+        lines.append(f"- [Minkabu]({minkabu_url})")
+        return "\n".join(lines) + "\n"
 
     def dive(self, ticker: str) -> str:
         from elephant.ticker_registry import normalize_ticker

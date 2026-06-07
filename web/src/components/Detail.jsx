@@ -204,13 +204,22 @@ function NewsSection({ news }) {
 // ── Links section ─────────────────────────────────────────────────────────────
 
 function LinksSection({ ticker, bare }) {
-  const links = [
-    { label: 'Yahoo Finance JP', href: `https://finance.yahoo.co.jp/quote/${ticker}` },
-    { label: 'Yahoo Finance JP BBS', href: `https://finance.yahoo.co.jp/quote/${ticker}/forum` },
-    { label: 'Yahoo Finance US', href: `https://finance.yahoo.com/quote/${ticker}` },
-    { label: 'Minkabu', href: `https://minkabu.jp/stock/${bare}` },
-    { label: 'TDnet', href: 'https://www.release.tdnet.info/' },
-  ]
+  const isJP = ticker.endsWith('.T')
+  const minkabuHref = isJP
+    ? `https://minkabu.jp/stock/${bare}`
+    : `https://us.minkabu.jp/stock/${bare}`
+  const links = isJP
+    ? [
+        { label: 'Yahoo Finance JP', href: `https://finance.yahoo.co.jp/quote/${ticker}` },
+        { label: 'Yahoo Finance JP BBS', href: `https://finance.yahoo.co.jp/quote/${ticker}/forum` },
+        { label: 'Yahoo Finance US', href: `https://finance.yahoo.com/quote/${ticker}` },
+        { label: 'Minkabu', href: minkabuHref },
+        { label: 'TDnet', href: 'https://www.release.tdnet.info/' },
+      ]
+    : [
+        { label: 'Yahoo Finance', href: `https://finance.yahoo.com/quote/${ticker}` },
+        { label: 'Minkabu US', href: minkabuHref },
+      ]
   return (
     <div className="flex flex-wrap gap-3">
       {links.map((l) => (
