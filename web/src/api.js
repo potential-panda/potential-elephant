@@ -1,5 +1,7 @@
+import { APP_BASE } from './app-base.js'
+
 async function apiFetch(path, options = {}) {
-  const res = await fetch(`/api${path}`, {
+  const res = await fetch(`${APP_BASE}/api${path}`, {
     headers: { 'Content-Type': 'application/json', ...options.headers },
     ...options,
   })
