@@ -265,16 +265,16 @@ class Diver:
         bare = ticker_t.replace(".T", "")
         is_jp = ticker_t.endswith(".T")
         minkabu_url = f"https://minkabu.jp/stock/{bare}" if is_jp else f"https://us.minkabu.jp/stock/{bare}"
-        lines = ["", "", "---", "## Links"]
+        lines = [
+            "", "", "---", "## Links",
+            f"- [Yahoo Finance JP BBS](https://finance.yahoo.co.jp/quote/{ticker_t}/forum)",
+            f"- [Yahoo Finance JP Quote](https://finance.yahoo.co.jp/quote/{ticker_t})",
+            f"- [Minkabu]({minkabu_url})",
+        ]
+        if not is_jp:
+            lines.append(f"- [Yahoo Finance US](https://finance.yahoo.com/quote/{ticker_t})")
         if is_jp:
-            lines += [
-                f"- [Yahoo Finance BBS](https://finance.yahoo.co.jp/quote/{ticker_t}/forum)",
-                f"- [Yahoo Finance Quote](https://finance.yahoo.co.jp/quote/{ticker_t})",
-                f"- [TDnet](https://www.release.tdnet.info/)",
-            ]
-        else:
-            lines.append(f"- [Yahoo Finance](https://finance.yahoo.com/quote/{ticker_t})")
-        lines.append(f"- [Minkabu]({minkabu_url})")
+            lines.append(f"- [TDnet](https://www.release.tdnet.info/)")
         return "\n".join(lines) + "\n"
 
     def dive(self, ticker: str) -> str:
