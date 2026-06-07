@@ -18,6 +18,50 @@ function ErrorMsg({ msg }) {
   )
 }
 
+function DiveContent({ content }) {
+  if (!content) return null
+  const sep = content.indexOf('\n---\n## Links\n')
+  const body = sep !== -1 ? content.slice(0, sep) : content
+  const linksBlock = sep !== -1 ? content.slice(sep + '\n---\n## Links\n'.length) : ''
+
+  const links = linksBlock
+    .split('\n')
+    .filter((l) => l.startsWith('- ['))
+    .map((l) => {
+      const m = l.match(/^- \[(.+?)\]\((.+?)\)$/)
+      return m ? { label: m[1], href: m[2] } : null
+    })
+    .filter(Boolean)
+
+  return (
+    <div className="space-y-3">
+      <div className="bg-slate-900 border border-slate-800 rounded-lg p-4">
+        <pre className="text-slate-300 text-xs leading-relaxed whitespace-pre-wrap font-mono break-words">
+          {body.trim()}
+        </pre>
+      </div>
+      {links.length > 0 && (
+        <div className="bg-slate-900 border border-slate-800 rounded-lg px-4 py-3">
+          <p className="text-xs text-slate-500 uppercase tracking-wider mb-2 font-medium">Links</p>
+          <div className="flex flex-wrap gap-3">
+            {links.map((l) => (
+              <a
+                key={l.href}
+                href={l.href}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-xs text-emerald-400 hover:text-emerald-300 underline underline-offset-2"
+              >
+                {l.label}
+              </a>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function Dive() {
   const [ticker, setTicker] = useState('')
   const [diving, setDiving] = useState(false)
@@ -25,6 +69,7 @@ export default function Dive() {
   const [result, setResult] = useState(null)
   const [resultTicker, setResultTicker] = useState(null)
   const [resultDate, setResultDate] = useState(null)
+  const [storageDir, setStorageDir] = useState(null)
 
   const [dives, setDives] = useState([])
   const [divesLoading, setDivesLoading] = useState(true)
@@ -65,6 +110,7 @@ export default function Dive() {
                     setResult(d.content)
                     setResultTicker(d.ticker)
                     setResultDate(d.date)
+                    setStorageDir(d.storage_dir ?? null)
                   })
                   .catch((e) => setDiveError(e.message))
                 fetchDives()
@@ -93,6 +139,7 @@ export default function Dive() {
         setResult(data.content)
         setResultTicker(data.ticker)
         setResultDate(data.date)
+        setStorageDir(data.storage_dir ?? null)
         setDiveError(null)
       })
       .catch((e) => setDiveError(e.message))
@@ -132,11 +179,7 @@ export default function Dive() {
             <span className="font-mono font-semibold text-emerald-400">{resultTicker}</span>
             {resultDate && <span className="text-slate-500 text-xs">{resultDate}</span>}
           </div>
-          <div className="bg-slate-900 border border-slate-800 rounded-lg p-4">
-            <pre className="text-slate-300 text-xs leading-relaxed whitespace-pre-wrap font-mono break-words">
-              {result}
-            </pre>
-          </div>
+          <DiveContent content={result} />
         </div>
       )}
 
@@ -169,6 +212,14 @@ export default function Dive() {
           </div>
         )}
       </div>
+
+      {storageDir && (
+        <div className="mt-6 pt-4 border-t border-slate-800">
+          <p className="text-xs text-slate-600">
+            Stored at <span className="font-mono text-slate-500">{storageDir}</span>
+          </p>
+        </div>
+      )}
     </div>
   )
 }

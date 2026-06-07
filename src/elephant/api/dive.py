@@ -5,25 +5,29 @@ from datetime import datetime
 from pathlib import Path
 
 DATA_DIR = "/panda-infra/elephant"
+DIVES_DIR = Path(DATA_DIR) / "dives"
 
 _jobs: dict[str, dict] = {}
 
 
 def get_latest(ticker: str) -> dict | None:
     slug = ticker.replace(".", "_")
-    dives_dir = Path(DATA_DIR) / "dives"
-    files = sorted(dives_dir.glob(f"*-{slug}.md"), reverse=True)
+    files = sorted(DIVES_DIR.glob(f"*-{slug}.md"), reverse=True)
     if not files:
         return None
     f = files[0]
     date = f.stem.split("-" + slug)[0]
-    return {"ticker": ticker, "date": date, "content": f.read_text(encoding="utf-8")}
+    return {
+        "ticker": ticker,
+        "date": date,
+        "content": f.read_text(encoding="utf-8"),
+        "storage_dir": str(DIVES_DIR),
+    }
 
 
 def list_dives() -> list[dict]:
-    dives_dir = Path(DATA_DIR) / "dives"
     result = []
-    for f in sorted(dives_dir.glob("*.md"), reverse=True):
+    for f in sorted(DIVES_DIR.glob("*.md"), reverse=True):
         parts = f.stem.rsplit("-", 1)
         if len(parts) == 2:
             date, slug = parts[0], parts[1]
@@ -42,12 +46,11 @@ def run_dive(job_id: str, ticker: str) -> None:
         diver = Diver(DATA_DIR, tree=tree)
         brief = diver.dive(ticker)
 
-        dives_dir = Path(DATA_DIR) / "dives"
-        dives_dir.mkdir(exist_ok=True)
+        DIVES_DIR.mkdir(exist_ok=True)
         date_str = datetime.now().strftime("%Y-%m-%d")
         slug = ticker.replace(".", "_")
-        (dives_dir / f"{date_str}-{slug}.md").write_text(brief, encoding="utf-8")
-        (dives_dir / f"{date_str}-{slug}.html").write_text(to_html(brief), encoding="utf-8")
+        (DIVES_DIR / f"{date_str}-{slug}.md").write_text(brief, encoding="utf-8")
+        (DIVES_DIR / f"{date_str}-{slug}.html").write_text(to_html(brief), encoding="utf-8")
 
         _jobs[job_id] = {"status": "done", "result": brief, "error": None, "ticker": ticker}
     except Exception as e:

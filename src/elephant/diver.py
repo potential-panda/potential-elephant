@@ -261,6 +261,16 @@ class Diver:
 
     # --- Public ---
 
+    def _links_section(self, ticker_t: str) -> str:
+        bare = ticker_t.replace(".T", "")
+        return (
+            "\n\n---\n## Links\n"
+            f"- [Yahoo Finance BBS](https://finance.yahoo.co.jp/quote/{ticker_t}/forum)\n"
+            f"- [Yahoo Finance Quote](https://finance.yahoo.co.jp/quote/{ticker_t})\n"
+            f"- [Minkabu](https://minkabu.jp/stock/{bare})\n"
+            f"- [TDnet](https://www.release.tdnet.info/)\n"
+        )
+
     def dive(self, ticker: str) -> str:
         ticker_t = ticker if ticker.endswith(".T") else f"{ticker}.T"
         context = self._build_context(ticker)
@@ -310,4 +320,5 @@ Style: direct and honest. Flag speculation clearly. "Worth investigating" not "B
 {lang_instruction(lang)}\
 """
 
-        return self._llm(system, context)
+        brief = self._llm(system, context)
+        return brief + self._links_section(ticker_t)
