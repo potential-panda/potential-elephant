@@ -19,7 +19,7 @@ const TAB_COMPONENTS = {
 }
 
 function tabFromHash() {
-  const hash = window.location.hash.slice(1)
+  const hash = window.location.hash.slice(1).split('/')[0]
   return TAB_COMPONENTS[hash] ? hash : 'digest'
 }
 

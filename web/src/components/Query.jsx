@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { queryDataset } from '../api'
 
 const DATASETS = [
@@ -8,6 +8,13 @@ const DATASETS = [
   { value: 'news_headlines', label: 'News Headlines', hasTicker: false, hasKeyword: true },
   { value: 'tdnet_disclosures', label: 'TDnet Disclosures', hasTicker: true, hasKeyword: false },
 ]
+
+const DATASET_VALUES = new Set(DATASETS.map((d) => d.value))
+
+function datasetFromHash() {
+  const sub = window.location.hash.slice(1).split('/')[1]
+  return sub && DATASET_VALUES.has(sub) ? sub : 'yahoo_comments'
+}
 
 function Spinner() {
   return (
@@ -192,7 +199,7 @@ function ResultsTable({ dataset, records }) {
 }
 
 export default function Query() {
-  const [dataset, setDataset] = useState('yahoo_comments')
+  const [dataset, setDataset] = useState(datasetFromHash)
   const [ticker, setTicker] = useState('')
   const [keyword, setKeyword] = useState('')
   const [limit, setLimit] = useState(50)
@@ -200,6 +207,18 @@ export default function Query() {
   const [error, setError] = useState(null)
   const [results, setResults] = useState(null)
   const [queried, setQueried] = useState(null)
+
+  useEffect(() => {
+    const onHashChange = () => setDataset(datasetFromHash())
+    window.addEventListener('hashchange', onHashChange)
+    return () => window.removeEventListener('hashchange', onHashChange)
+  }, [])
+
+  const handleDatasetChange = (value) => {
+    window.location.hash = `query/${value}`
+    setDataset(value)
+    setResults(null)
+  }
 
   const selectedDataset = DATASETS.find((d) => d.value === dataset)
 
@@ -232,10 +251,7 @@ export default function Query() {
             <label className="text-xs text-slate-500 uppercase tracking-wider">Dataset</label>
             <select
               value={dataset}
-              onChange={(e) => {
-                setDataset(e.target.value)
-                setResults(null)
-              }}
+              onChange={(e) => handleDatasetChange(e.target.value)}
               className="bg-slate-800 border border-slate-700 text-slate-100 rounded-md px-3 py-2 text-sm focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500/50"
             >
               {DATASETS.map((d) => (
