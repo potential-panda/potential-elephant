@@ -18,9 +18,10 @@ const LAYER_HEADER = {
 
 function TickerChip({ node }) {
   return (
-    <div
+    <a
+      href={`#detail/${node.ticker}`}
       className={[
-        'inline-flex flex-col px-2.5 py-1.5 rounded border text-xs mb-1.5 mr-1.5',
+        'inline-flex flex-col px-2.5 py-1.5 rounded border text-xs mb-1.5 mr-1.5 transition-opacity hover:opacity-80',
         LAYER_COLORS[node.layer] || 'bg-slate-800 text-slate-300 border-slate-700',
       ].join(' ')}
     >
@@ -31,7 +32,7 @@ function TickerChip({ node }) {
       {node.role && (
         <span className="text-xs opacity-50 mt-0.5">{node.role}</span>
       )}
-    </div>
+    </a>
   )
 }
 
