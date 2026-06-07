@@ -11,7 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from elephant.api import datasets, digest, dive, schedule_status, tickers, tree
+from elephant.api import datasets, detail, digest, dive, schedule_status, tickers, tree
 
 app = FastAPI(title="Elephant Research Dashboard", version="1.0.0")
 
@@ -111,6 +111,13 @@ def api_job_status(job_id: str):
     if not result:
         raise HTTPException(status_code=404, detail="Job not found")
     return result
+
+
+# --- Detail ---
+
+@app.get("/api/detail/{ticker}")
+def api_detail(ticker: str):
+    return detail.get_detail(ticker)
 
 
 # --- Datasets ---

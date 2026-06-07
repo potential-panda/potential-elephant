@@ -11,6 +11,7 @@ async function apiFetch(path, options = {}) {
 }
 
 export const getTickers = () => apiFetch('/tickers')
+export const getDetail = (ticker) => apiFetch(`/detail/${encodeURIComponent(ticker)}`)
 
 export const getDigestLatest = () => apiFetch('/digest/latest')
 export const getDigestList = () => apiFetch('/digest/list')

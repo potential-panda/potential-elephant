@@ -7,6 +7,7 @@ import Tree from './components/Tree'
 import Dive from './components/Dive'
 import Query from './components/Query'
 import Stats from './components/Stats'
+import Detail from './components/Detail'
 
 const TAB_COMPONENTS = {
   tickers: Tickers,
@@ -16,6 +17,7 @@ const TAB_COMPONENTS = {
   dive: Dive,
   query: Query,
   stats: Stats,
+  detail: Detail,
 }
 
 function tabFromHash() {

@@ -1,5 +1,6 @@
 const TABS = [
   { id: 'digest', label: 'Digest' },
+  { id: 'detail', label: 'Detail' },
   { id: 'dive', label: 'Dive' },
   { id: 'query', label: 'Query' },
   { id: 'tree', label: 'Tree' },
