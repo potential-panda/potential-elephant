@@ -59,8 +59,8 @@ export default function Dive() {
               if (job.status === 'done') {
                 clearInterval(pollRef.current)
                 setDiving(false)
-                // Load the latest result for this ticker
-                getDiveLatest(t)
+                const normalizedTicker = job.ticker || t
+                getDiveLatest(normalizedTicker)
                   .then((d) => {
                     setResult(d.content)
                     setResultTicker(d.ticker)
