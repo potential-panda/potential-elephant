@@ -1,81 +1,91 @@
-import { useState } from 'react'
-
 const TABS = [
-  { id: 'digest', label: 'Digest' },
-  { id: 'detail', label: 'Detail' },
-  { id: 'dive', label: 'Dive' },
-  { id: 'query', label: 'Query' },
-  { id: 'tree', label: 'Tree' },
-  { id: 'tickers', label: 'Tickers' },
+  { id: 'digest',   label: 'Digest'   },
+  { id: 'detail',   label: 'Detail'   },
+  { id: 'dive',     label: 'Dive'     },
+  { id: 'query',    label: 'Query'    },
+  { id: 'tree',     label: 'Tree'     },
+  { id: 'tickers',  label: 'Tickers'  },
   { id: 'schedule', label: 'Schedule' },
-  { id: 'stats', label: 'Stats' },
+  { id: 'stats',    label: 'Stats'    },
 ]
 
 export default function Layout({ activeTab, onTabChange, children }) {
-  const [open, setOpen] = useState(false)
-
   return (
-    <div className="flex w-full min-h-screen">
-      {/* Sidebar */}
-      <aside
-        className={[
-          'shrink-0 bg-slate-900 border-r border-slate-800 flex flex-col fixed top-0 left-0 h-screen z-20 transition-all duration-200',
-          open ? 'w-48' : 'w-10',
-        ].join(' ')}
+    <div className="flex flex-col w-full min-h-screen">
+      {/* Top bar */}
+      <header
+        className="flex items-center gap-5 px-7 h-[54px] sticky top-0 z-50 shrink-0"
+        style={{
+          background: 'rgba(7, 10, 14, 0.92)',
+          backdropFilter: 'blur(16px)',
+          WebkitBackdropFilter: 'blur(16px)',
+          borderBottom: '1px solid rgba(0, 220, 150, 0.1)',
+        }}
       >
-        {/* Toggle button */}
-        <button
-          onClick={() => setOpen(v => !v)}
-          className="w-full flex items-center justify-center h-10 text-slate-400 hover:text-slate-100 hover:bg-slate-800/60 transition-colors shrink-0"
-          title={open ? 'Collapse sidebar' : 'Expand sidebar'}
+        {/* Logo */}
+        <div
+          className="flex items-center gap-2.5 font-mono font-bold uppercase shrink-0"
+          style={{ color: '#00dc96', fontSize: '15px', letterSpacing: '0.25em' }}
         >
-          {open ? '«' : '»'}
-        </button>
+          <span
+            className="rounded-full shrink-0"
+            style={{
+              width: 7, height: 7,
+              background: '#00dc96',
+              boxShadow: '0 0 8px rgba(0,220,150,0.5)',
+            }}
+          />
+          ELEPHANT
+          <span
+            className="font-light normal-case"
+            style={{ color: '#5a7080', fontSize: '12px', letterSpacing: '0.08em' }}
+          >
+            Stock Research
+          </span>
+        </div>
 
-        {open && (
-          <>
-            <div className="px-4 py-4 border-b border-slate-800">
-              <div className="flex items-center gap-2">
-                <span className="text-emerald-400 text-xl font-bold">&#9650;</span>
-                <span className="text-slate-100 font-semibold tracking-wide text-base">
-                  Elephant
-                </span>
-              </div>
-              <p className="text-slate-500 text-xs mt-1">Stock Research</p>
-            </div>
+        {/* Nav tabs — scrollable on narrow screens */}
+        <nav className="flex items-center gap-1 overflow-x-auto flex-1" style={{ scrollbarWidth: 'none' }}>
+          {TABS.map(tab => (
+            <button
+              key={tab.id}
+              onClick={() => onTabChange(tab.id)}
+              className="shrink-0 font-mono font-semibold uppercase rounded transition-all duration-180 whitespace-nowrap"
+              style={{
+                padding: '5px 12px',
+                fontSize: '10px',
+                letterSpacing: '0.12em',
+                border: activeTab === tab.id
+                  ? '1px solid #00dc96'
+                  : '1px solid transparent',
+                color: activeTab === tab.id ? '#00dc96' : '#5a7080',
+                background: activeTab === tab.id ? 'rgba(0,220,150,0.08)' : 'transparent',
+                boxShadow: activeTab === tab.id ? '0 0 10px rgba(0,220,150,0.2)' : 'none',
+              }}
+              onMouseEnter={e => {
+                if (activeTab !== tab.id) {
+                  e.currentTarget.style.color = '#bfcfdf'
+                  e.currentTarget.style.borderColor = 'rgba(255,255,255,0.1)'
+                }
+              }}
+              onMouseLeave={e => {
+                if (activeTab !== tab.id) {
+                  e.currentTarget.style.color = '#5a7080'
+                  e.currentTarget.style.borderColor = 'transparent'
+                }
+              }}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </nav>
+      </header>
 
-            <nav className="flex-1 py-3 overflow-y-auto">
-              {TABS.map((tab) => (
-                <button
-                  key={tab.id}
-                  onClick={() => onTabChange(tab.id)}
-                  className={[
-                    'w-full text-left px-4 py-2.5 text-sm font-medium transition-colors duration-150',
-                    activeTab === tab.id
-                      ? 'bg-slate-800 text-emerald-400 border-l-2 border-emerald-400'
-                      : 'text-slate-400 hover:text-slate-100 hover:bg-slate-800/50 border-l-2 border-transparent',
-                  ].join(' ')}
-                >
-                  {tab.label}
-                </button>
-              ))}
-            </nav>
-
-            <div className="px-4 py-3 border-t border-slate-800">
-              <p className="text-slate-600 text-xs">v0.1.0</p>
-            </div>
-          </>
-        )}
-      </aside>
-
-      {/* Main content — offset matches sidebar width */}
-      <main
-        className={[
-          'flex-1 min-h-screen overflow-y-auto bg-slate-950 transition-all duration-200',
-          open ? 'ml-48' : 'ml-10',
-        ].join(' ')}
-      >
-        <div className="p-6">{children}</div>
+      {/* Main content */}
+      <main className="flex-1 overflow-y-auto">
+        <div className="max-w-[1100px] mx-auto px-7 py-7 pb-16">
+          {children}
+        </div>
       </main>
     </div>
   )

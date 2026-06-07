@@ -1,38 +1,70 @@
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 @layer base {
-  html {
-    font-size: 14px;
+  :root {
+    --bg:          #070a0e;
+    --surface:     #111720;
+    --surface2:    #161e2a;
+    --border:      rgba(0, 220, 150, 0.1);
+    --border-dim:  rgba(255, 255, 255, 0.05);
+    --accent:      #00dc96;
+    --accent-dim:  rgba(0, 220, 150, 0.12);
+    --accent-glow: rgba(0, 220, 150, 0.3);
+    --link:        #3ab4f5;
+    --text:        #bfcfdf;
+    --text-muted:  #5a7080;
+    --text-dim:    #304050;
+    --red:         #f04060;
+    --orange:      #f09030;
+    --mono:        'JetBrains Mono', 'Fira Code', monospace;
   }
 
+  html { font-size: 13px; }
+
   body {
-    @apply bg-slate-950 text-slate-100 antialiased;
+    background-color: var(--bg);
+    background-image:
+      radial-gradient(ellipse 80% 40% at 50% -10%, rgba(0, 220, 150, 0.05) 0%, transparent 100%),
+      radial-gradient(rgba(0, 220, 150, 0.055) 1px, transparent 0);
+    background-size: 100% 100%, 32px 32px;
+    font-family: 'JetBrains Mono', 'Fira Code', monospace;
+    color: var(--text);
     margin: 0;
+    -webkit-font-smoothing: antialiased;
   }
 
   #root {
     width: 100%;
     min-height: 100vh;
     display: flex;
+    flex-direction: column;
   }
 
-  pre {
-    @apply font-mono text-sm;
+  pre { font-family: var(--mono); font-size: 0.9rem; }
+
+  ::-webkit-scrollbar { width: 5px; height: 5px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: #1c2535; border-radius: 10px; }
+  ::-webkit-scrollbar-thumb:hover { background: #253040; }
+
+  /* Pulse animation for running status dots */
+  @keyframes pulse-green {
+    0%   { box-shadow: 0 0 0 0 rgba(0, 220, 150, 0.5); }
+    50%  { box-shadow: 0 0 0 5px rgba(0, 220, 150, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(0, 220, 150, 0); }
   }
 
-  ::-webkit-scrollbar {
-    width: 6px;
-    height: 6px;
+  .pulse-green { animation: pulse-green 2.4s ease-in-out infinite; }
+
+  /* Slide-in animation for cards/rows */
+  @keyframes slideIn {
+    from { opacity: 0; transform: translateY(6px); }
+    to   { opacity: 1; transform: translateY(0); }
   }
-  ::-webkit-scrollbar-track {
-    @apply bg-slate-950;
-  }
-  ::-webkit-scrollbar-thumb {
-    @apply bg-slate-700 rounded;
-  }
-  ::-webkit-scrollbar-thumb:hover {
-    @apply bg-slate-600;
-  }
+
+  .animate-slide-in { animation: slideIn 0.2s ease both; }
 }
