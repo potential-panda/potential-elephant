@@ -20,7 +20,7 @@ const TAB_COMPONENTS = {
 
 function tabFromHash() {
   const hash = window.location.hash.slice(1)
-  return TAB_COMPONENTS[hash] ? hash : 'tickers'
+  return TAB_COMPONENTS[hash] ? hash : 'digest'
 }
 
 export default function App() {

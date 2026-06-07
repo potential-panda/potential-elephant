@@ -1,10 +1,10 @@
 const TABS = [
-  { id: 'tickers', label: 'Tickers' },
   { id: 'digest', label: 'Digest' },
-  { id: 'schedule', label: 'Schedule' },
-  { id: 'tree', label: 'Tree' },
   { id: 'dive', label: 'Dive' },
   { id: 'query', label: 'Query' },
+  { id: 'tree', label: 'Tree' },
+  { id: 'tickers', label: 'Tickers' },
+  { id: 'schedule', label: 'Schedule' },
   { id: 'stats', label: 'Stats' },
 ]
 
