@@ -19,11 +19,9 @@ def generate_id(*args):
 class MinkabuHarvester(Harvester):
     def __init__(self, store: Store, ticker: str):
         super().__init__(store)
-        if not ticker.endswith(".T"):
-            ticker = f"{ticker}.T"
-        self.ticker = ticker
-        # Remove .T for URL construction
-        self.minkabu_ticker = ticker.replace(".T", "")
+        from elephant.ticker_registry import normalize_ticker
+        self.ticker = normalize_ticker(ticker)
+        self.minkabu_ticker = self.ticker.replace(".T", "") if self.ticker.endswith(".T") else self.ticker
 
     def get_url(self, params: dict) -> str:
         # This harvester visits multiple URLs, so we return the base one for reference
@@ -44,6 +42,8 @@ class MinkabuHarvester(Harvester):
         html = re.sub(r"\s+", " ", html).strip()
         return html
 
+    _ERROR_PHRASES = ["ページが見つかりませんでした", "404 Not Found"]
+
     async def _get_page_content(self, page, url: str) -> Optional[str]:
         wait_time = random.uniform(3, 8)
         print(f"Waiting {wait_time:.2f} seconds before loading {url}...")
@@ -55,6 +55,9 @@ class MinkabuHarvester(Harvester):
             container = await page.query_selector("#contents")
             if container:
                 raw_html = await container.inner_html()
+                if any(phrase in raw_html for phrase in self._ERROR_PHRASES):
+                    print(f"404/not-found page detected for {url}, skipping.")
+                    return None
                 return self._clean_html(raw_html)
             return None
         except Exception as e:
