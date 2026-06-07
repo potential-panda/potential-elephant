@@ -55,97 +55,11 @@ function DatasetDots({ datasets }) {
   )
 }
 
-function TickerPanel({ ticker, onClose }) {
-  const latest =
-    ticker.speed_history && ticker.speed_history.length > 0
-      ? ticker.speed_history[ticker.speed_history.length - 1].comments_per_hour
-      : null
-
-  return (
-    <div className="fixed inset-0 z-30 flex items-center justify-center bg-black/60" onClick={onClose}>
-      <div
-        className="bg-slate-900 border border-slate-700 rounded-lg p-6 w-full max-w-lg shadow-2xl"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-semibold text-slate-100">
-            {ticker.ticker}
-            {latest != null && (
-              <span className="ml-3 text-sm text-emerald-400 font-normal">
-                {latest.toFixed(1)} c/h
-              </span>
-            )}
-          </h3>
-          <button
-            onClick={onClose}
-            className="text-slate-500 hover:text-slate-200 text-xl leading-none"
-          >
-            &times;
-          </button>
-        </div>
-
-        <div className="mb-4">
-          <p className="text-xs text-slate-500 mb-2 uppercase tracking-wider">Speed history (comments/hr)</p>
-          {ticker.speed_history && ticker.speed_history.length > 0 ? (
-            <div>
-              <div className="mb-3">
-                <Sparkline history={ticker.speed_history} />
-              </div>
-              <div className="space-y-1 max-h-48 overflow-y-auto pr-1">
-                {[...ticker.speed_history].reverse().map((h, i) => {
-                  const max = Math.max(...ticker.speed_history.map((x) => x.comments_per_hour), 1)
-                  const pct = Math.round((h.comments_per_hour / max) * 100)
-                  return (
-                    <div key={i} className="flex items-center gap-2 text-xs">
-                      <span className="text-slate-500 w-24 shrink-0">{h.date}</span>
-                      <div className="flex-1 bg-slate-800 rounded-full h-1.5">
-                        <div
-                          className="bg-emerald-500 h-1.5 rounded-full"
-                          style={{ width: `${pct}%` }}
-                        />
-                      </div>
-                      <span className="text-slate-300 w-12 text-right">
-                        {h.comments_per_hour.toFixed(1)}
-                      </span>
-                    </div>
-                  )
-                })}
-              </div>
-            </div>
-          ) : (
-            <p className="text-slate-600 text-sm">No history available</p>
-          )}
-        </div>
-
-        <div>
-          <p className="text-xs text-slate-500 mb-2 uppercase tracking-wider">Datasets</p>
-          <div className="flex gap-2 flex-wrap">
-            {ticker.datasets
-              ? Object.entries(ticker.datasets).map(([k, v]) => (
-                  <span
-                    key={k}
-                    className={[
-                      'px-2 py-1 rounded text-xs',
-                      v ? 'bg-emerald-900/60 text-emerald-400' : 'bg-slate-800 text-slate-600',
-                    ].join(' ')}
-                  >
-                    {k}
-                  </span>
-                ))
-              : <span className="text-slate-600 text-sm">—</span>}
-          </div>
-        </div>
-      </div>
-    </div>
-  )
-}
-
 export default function Tickers() {
   const [tickers, setTickers] = useState([])
   const [meta, setMeta] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
-  const [selected, setSelected] = useState(null)
 
   useEffect(() => {
     getTickers()
@@ -188,9 +102,8 @@ export default function Tickers() {
               return (
                 <tr
                   key={t.ticker}
-                  onClick={() => setSelected(t)}
                   className={[
-                    'border-b border-slate-800/60 cursor-pointer transition-colors',
+                    'border-b border-slate-800/60 transition-colors',
                     i % 2 === 0 ? 'bg-transparent' : 'bg-slate-900/40',
                     'hover:bg-slate-800/50',
                   ].join(' ')}
@@ -198,8 +111,13 @@ export default function Tickers() {
                   <td className="px-4 py-2.5 text-slate-500 font-mono">
                     {t.bbs_rank ?? '—'}
                   </td>
-                  <td className="px-4 py-2.5 font-semibold text-emerald-400 font-mono">
-                    {t.ticker}
+                  <td className="px-4 py-2.5 font-semibold font-mono">
+                    <a
+                      href={`#detail/${t.ticker}`}
+                      className="text-emerald-400 hover:text-emerald-300 hover:underline"
+                    >
+                      {t.ticker}
+                    </a>
                   </td>
                   <td className="px-4 py-2.5 text-slate-400 font-mono text-xs">
                     {t.last_seen ?? '—'}
@@ -226,10 +144,6 @@ export default function Tickers() {
           </tbody>
         </table>
       </div>
-
-      {selected && (
-        <TickerPanel ticker={selected} onClose={() => setSelected(null)} />
-      )}
 
       <StorageFooter paths={[meta?.tickers_file, meta?.cache_file].filter(Boolean)} />
     </div>
