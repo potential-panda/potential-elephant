@@ -48,6 +48,32 @@ RSS_FEEDS = [
 MAX_ITEMS_PER_FEED = 20
 NEWS_DAYS = 5  # ignore articles older than this
 
+# HTML pages (no RSS) — scraped via playwright.
+# kind: "minkabu" uses #news_list selector; "yahoo_finance_jp" uses /news/detail/ links.
+HTML_NEWS_SOURCES = [
+    {
+        "source": "minkabu_jp_news",
+        "url": "https://minkabu.jp/news",
+        "lang": "ja",
+        "base_url": "https://minkabu.jp",
+        "kind": "minkabu",
+    },
+    {
+        "source": "minkabu_us_news",
+        "url": "https://us.minkabu.jp/news",
+        "lang": "ja",
+        "base_url": "https://us.minkabu.jp",
+        "kind": "minkabu",
+    },
+    {
+        "source": "yahoo_finance_jp_us_stocks",
+        "url": "https://finance.yahoo.co.jp/news/search/?q=%E7%B1%B3%E5%9B%BD%E6%A0%AA&queryType=andQuery&category=all",
+        "lang": "ja",
+        "base_url": "",
+        "kind": "yahoo_finance_jp",
+    },
+]
+
 
 def _generate_id(url: str) -> str:
     return hashlib.md5(url.encode()).hexdigest()
@@ -59,6 +85,75 @@ class NewsHarvester(Harvester):
 
     def get_url(self, params: dict) -> str:
         return "rss://multiple"
+
+    async def _scrape_html_sources(self, all_items: list, scraped_at: datetime) -> None:
+        from playwright.async_api import async_playwright
+        from playwright_stealth import Stealth
+
+        async with async_playwright() as p:
+            browser = await p.chromium.launch(headless=True)
+            context = await browser.new_context()
+            page = await context.new_page()
+            await Stealth().apply_stealth_async(page)
+
+            for cfg in HTML_NEWS_SOURCES:
+                try:
+                    await page.goto(cfg["url"], wait_until="domcontentloaded", timeout=60000)
+                    await page.wait_for_timeout(2000)
+
+                    if cfg["kind"] == "minkabu":
+                        raw = await page.evaluate("""() => {
+                            const results = [];
+                            document.querySelectorAll('.title_box a, li a[href*="/news/"]').forEach(a => {
+                                const title = a.textContent.trim();
+                                const href = a.getAttribute('href');
+                                if (title && href && /\\/news\\/\\d+/.test(href))
+                                    results.push({title, href});
+                            });
+                            return results;
+                        }""")
+                        for item in raw[:MAX_ITEMS_PER_FEED]:
+                            href = item["href"]
+                            url = href if href.startswith("http") else cfg["base_url"] + href
+                            all_items.append({
+                                "id": _generate_id(url),
+                                "source": cfg["source"],
+                                "lang": cfg["lang"],
+                                "title": item["title"],
+                                "summary": "",
+                                "url": url,
+                                "published": "",
+                                "scraped_at": scraped_at,
+                            })
+
+                    elif cfg["kind"] == "yahoo_finance_jp":
+                        raw = await page.evaluate("""() => {
+                            const results = [];
+                            document.querySelectorAll('a[href*="/news/detail/"]').forEach(a => {
+                                const titleEl = a.querySelector('[class*="title"]');
+                                const title = titleEl ? titleEl.textContent.trim() : '';
+                                const href = a.href;
+                                if (title && href) results.push({title, href});
+                            });
+                            return results;
+                        }""")
+                        for item in raw[:MAX_ITEMS_PER_FEED]:
+                            all_items.append({
+                                "id": _generate_id(item["href"]),
+                                "source": cfg["source"],
+                                "lang": cfg["lang"],
+                                "title": item["title"],
+                                "summary": "",
+                                "url": item["href"],
+                                "published": "",
+                                "scraped_at": scraped_at,
+                            })
+
+                    logging.info(f"[News] {cfg['source']}: scraped HTML page")
+                except Exception:
+                    logging.exception(f"[News] Failed to scrape HTML source {cfg['source']}")
+
+            await browser.close()
 
     async def scrape(self, url: str, params: dict) -> dict[str, HarvesterResult]:
         scraped_at = datetime.now()
@@ -100,6 +195,8 @@ class NewsHarvester(Harvester):
                 logging.info(f"[News] {feed_config['source']}: {len(feed.entries)} items")
             except Exception:
                 logging.exception(f"[News] Failed to fetch {feed_config['source']}")
+
+        await self._scrape_html_sources(all_items, scraped_at)
 
         results = {}
         if all_items:
