@@ -82,6 +82,11 @@ function EvaluationsTable({ records }) {
   )
 }
 
+function stripHtml(str) {
+  if (!str) return '—'
+  return str.replace(/<[^>]*>/g, '').replace(/&[a-z]+;/gi, ' ').replace(/\s+/g, ' ').trim() || '—'
+}
+
 function NewsTable({ records }) {
   return (
     <table className="w-full text-xs">
@@ -101,7 +106,7 @@ function NewsTable({ records }) {
             </td>
             <td className="px-3 py-2 text-slate-400 align-top whitespace-nowrap">{r.source ?? '—'}</td>
             <td className="px-3 py-2 text-slate-200 align-top font-medium">{r.title ?? '—'}</td>
-            <td className="px-3 py-2 text-slate-400 align-top leading-relaxed">{r.summary ?? '—'}</td>
+            <td className="px-3 py-2 text-slate-400 align-top leading-relaxed">{stripHtml(r.summary)}</td>
           </tr>
         ))}
       </tbody>
