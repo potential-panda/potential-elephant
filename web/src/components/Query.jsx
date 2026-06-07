@@ -83,8 +83,16 @@ function EvaluationsTable({ records }) {
 }
 
 function stripHtml(str) {
-  if (!str) return '—'
-  return str.replace(/<[^>]*>/g, '').replace(/&[a-z]+;/gi, ' ').replace(/\s+/g, ' ').trim() || '—'
+  if (!str) return ''
+  return str.replace(/<[^>]*>/g, '').replace(/&[a-z]+;/gi, ' ').replace(/\s+/g, ' ').trim()
+}
+
+function sourceDomain(url) {
+  try {
+    return new URL(url).hostname.replace(/^www\./, '')
+  } catch {
+    return null
+  }
 }
 
 function NewsTable({ records }) {
@@ -95,20 +103,43 @@ function NewsTable({ records }) {
           <th className="text-left px-3 py-2 w-28">Date</th>
           <th className="text-left px-3 py-2 w-32">Source</th>
           <th className="text-left px-3 py-2">Title</th>
-          <th className="text-left px-3 py-2">Summary</th>
         </tr>
       </thead>
       <tbody>
-        {records.map((r, i) => (
-          <tr key={i} className="border-b border-slate-800/50 hover:bg-slate-800/30">
-            <td className="px-3 py-2 text-slate-500 font-mono align-top whitespace-nowrap">
-              {r.date ?? '—'}
-            </td>
-            <td className="px-3 py-2 text-slate-400 align-top whitespace-nowrap">{r.source ?? '—'}</td>
-            <td className="px-3 py-2 text-slate-200 align-top font-medium">{r.title ?? '—'}</td>
-            <td className="px-3 py-2 text-slate-400 align-top leading-relaxed">{stripHtml(r.summary)}</td>
-          </tr>
-        ))}
+        {records.map((r, i) => {
+          const summary = stripHtml(r.summary)
+          const showSummary = summary && summary !== r.title
+          const domain = r.url ? sourceDomain(r.url) : null
+          const sourceHref = domain ? `https://${domain}` : null
+          return (
+            <tr key={i} className="border-b border-slate-800/50 hover:bg-slate-800/30">
+              <td className="px-3 py-2 text-slate-500 font-mono align-top whitespace-nowrap">
+                {r.published ? r.published.slice(0, 16) : (r.date ?? '—')}
+              </td>
+              <td className="px-3 py-2 text-slate-400 align-top whitespace-nowrap">
+                {sourceHref ? (
+                  <a href={sourceHref} target="_blank" rel="noopener noreferrer"
+                    className="hover:text-emerald-400 underline underline-offset-2">
+                    {r.source ?? domain}
+                  </a>
+                ) : (r.source ?? '—')}
+              </td>
+              <td className="px-3 py-2 align-top">
+                {r.url ? (
+                  <a href={r.url} target="_blank" rel="noopener noreferrer"
+                    className="text-slate-200 font-medium hover:text-emerald-400 underline underline-offset-2">
+                    {r.title ?? '—'}
+                  </a>
+                ) : (
+                  <span className="text-slate-200 font-medium">{r.title ?? '—'}</span>
+                )}
+                {showSummary && (
+                  <p className="text-slate-500 mt-1 leading-relaxed">{summary}</p>
+                )}
+              </td>
+            </tr>
+          )
+        })}
       </tbody>
     </table>
   )
