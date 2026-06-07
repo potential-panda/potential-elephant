@@ -98,56 +98,66 @@ function CommentsSection({ comments }) {
 
 // ── Evaluations section ───────────────────────────────────────────────────────
 
-function EvaluationsSection({ evaluations, minkabu }) {
-  const hasEvals = evaluations && evaluations.length > 0
-  const hasMinkabu = !!minkabu
-  if (!hasEvals && !hasMinkabu) return <Empty />
+function EvaluationsSection({ evaluations }) {
+  if (!evaluations || evaluations.length === 0) return <Empty />
+  return (
+    <div className="bg-slate-900 border border-slate-800 rounded-lg overflow-x-auto">
+      <table className="w-full text-xs">
+        <thead>
+          <tr className="border-b border-slate-800 text-slate-500 uppercase tracking-wider">
+            <th className="text-left px-3 py-2">Scraped At</th>
+            <th className="text-right px-3 py-2">Bull %</th>
+            <th className="text-right px-3 py-2">Bear %</th>
+            <th className="text-right px-3 py-2">Neutral %</th>
+          </tr>
+        </thead>
+        <tbody>
+          {evaluations.map((r, i) => (
+            <tr key={i} className="border-b border-slate-800/50 hover:bg-slate-800/30">
+              <td className="px-3 py-2 text-slate-400 font-mono">{r.scraped_at ?? '—'}</td>
+              <td className="px-3 py-2 text-emerald-400 text-right font-mono">
+                {r.bull_pct != null ? `${r.bull_pct}%` : (r.strongest != null ? `${(parseFloat(r.strongest||0)+parseFloat(r.strong||0)).toFixed(0)}%` : '—')}
+              </td>
+              <td className="px-3 py-2 text-red-400 text-right font-mono">
+                {r.bear_pct != null ? `${r.bear_pct}%` : (r.weak != null ? `${(parseFloat(r.weak||0)+parseFloat(r.weakest||0)).toFixed(0)}%` : '—')}
+              </td>
+              <td className="px-3 py-2 text-slate-400 text-right font-mono">
+                {r.neutral_pct != null ? `${r.neutral_pct}%` : (r.both != null ? `${parseFloat(r.both||0).toFixed(0)}%` : '—')}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+}
 
+// ── Minkabu section ───────────────────────────────────────────────────────────
+
+const MINKABU_LABELS = {
+  analysis: 'Analysis',
+  research: 'Research',
+  pick: 'Pick',
+  analyst_consensus: 'Analyst Consensus',
+}
+
+function MinkabuSection({ minkabu }) {
+  if (!minkabu) return <Empty />
+  const subs = Object.entries(MINKABU_LABELS)
+  const available = subs.filter(([key]) => minkabu[key])
+  if (available.length === 0) return <Empty />
   return (
     <div className="space-y-4">
-      {hasEvals && (
-        <div>
-          <p className="text-xs text-slate-500 uppercase tracking-wider mb-2">Yahoo Evaluations</p>
-          <div className="bg-slate-900 border border-slate-800 rounded-lg overflow-x-auto">
-            <table className="w-full text-xs">
-              <thead>
-                <tr className="border-b border-slate-800 text-slate-500 uppercase tracking-wider">
-                  <th className="text-left px-3 py-2">Scraped At</th>
-                  <th className="text-right px-3 py-2">Bull %</th>
-                  <th className="text-right px-3 py-2">Bear %</th>
-                  <th className="text-right px-3 py-2">Neutral %</th>
-                </tr>
-              </thead>
-              <tbody>
-                {evaluations.map((r, i) => (
-                  <tr key={i} className="border-b border-slate-800/50 hover:bg-slate-800/30">
-                    <td className="px-3 py-2 text-slate-400 font-mono">{r.scraped_at ?? '—'}</td>
-                    <td className="px-3 py-2 text-emerald-400 text-right font-mono">
-                      {r.bull_pct != null ? `${r.bull_pct}%` : (r.strongest != null ? `${(parseFloat(r.strongest||0)+parseFloat(r.strong||0)).toFixed(0)}%` : '—')}
-                    </td>
-                    <td className="px-3 py-2 text-red-400 text-right font-mono">
-                      {r.bear_pct != null ? `${r.bear_pct}%` : (r.weak != null ? `${(parseFloat(r.weak||0)+parseFloat(r.weakest||0)).toFixed(0)}%` : '—')}
-                    </td>
-                    <td className="px-3 py-2 text-slate-400 text-right font-mono">
-                      {r.neutral_pct != null ? `${r.neutral_pct}%` : (r.both != null ? `${parseFloat(r.both||0).toFixed(0)}%` : '—')}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
-      {hasMinkabu && (
-        <div>
-          <p className="text-xs text-slate-500 uppercase tracking-wider mb-2">Minkabu Analyst Consensus</p>
+      {available.map(([key, label]) => (
+        <div key={key}>
+          <p className="text-xs text-slate-500 uppercase tracking-wider mb-2">{label}</p>
           <div className="bg-slate-900 border border-slate-800 rounded-lg p-4">
             <pre className="text-slate-300 text-xs leading-relaxed whitespace-pre-wrap font-mono break-words">
-              {minkabu}
+              {minkabu[key]}
             </pre>
           </div>
         </div>
-      )}
+      ))}
     </div>
   )
 }
@@ -375,17 +385,20 @@ export default function Detail() {
           )}
           <DiveSection dive={data.dive} />
 
-          <SectionHeader title="Yahoo Comments" />
-          <CommentsSection comments={data.comments} />
+          <SectionHeader title="Yahoo Evaluations" />
+          <EvaluationsSection evaluations={data.evaluations} />
 
-          <SectionHeader title="Evaluations" />
-          <EvaluationsSection evaluations={data.evaluations} minkabu={data.minkabu} />
+          <SectionHeader title="Minkabu" />
+          <MinkabuSection minkabu={data.minkabu} />
 
           <SectionHeader title="Recent News" />
           <NewsSection news={data.news} />
 
           <SectionHeader title="External Links" />
           <LinksSection ticker={data.ticker} bare={data.bare} />
+
+          <SectionHeader title="Yahoo Comments" />
+          <CommentsSection comments={data.comments} />
         </div>
       )}
     </div>

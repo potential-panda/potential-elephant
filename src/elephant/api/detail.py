@@ -58,22 +58,27 @@ def get_detail(ticker_raw: str) -> dict:
     else:
         result["evaluations"] = None
 
-    # 4. Minkabu
+    # 4. Minkabu — all four sub-pages
     year = datetime.now().strftime("%Y")
     minkabu_path = os.path.join(
         DATA_DIR, "dataset=minkabu_raw_html", f"ticker={ticker_t}", f"YEAR={year}", "data.parquet"
     )
+    MINKABU_SUBS = ["analysis", "research", "pick", "analyst_consensus"]
     if os.path.exists(minkabu_path):
         try:
             from elephant.synthesizer import _strip_html
             df = pd.read_parquet(minkabu_path).sort_values("scraped_at", ascending=False)
             if not df.empty:
-                raw = str(df.iloc[0].get("analyst_consensus", ""))
-                text = _strip_html(raw).strip()
-                if len(text) > 50 and "ページが見つかりませんでした" not in text:
-                    result["minkabu"] = text[:3000]
-                else:
-                    result["minkabu"] = None
+                row = df.iloc[0]
+                minkabu = {}
+                for sub in MINKABU_SUBS:
+                    raw = str(row.get(sub, "") or "")
+                    text = _strip_html(raw).strip()
+                    if len(text) > 50 and "ページが見つかりませんでした" not in text:
+                        minkabu[sub] = text[:4000]
+                    else:
+                        minkabu[sub] = None
+                result["minkabu"] = minkabu if any(minkabu.values()) else None
             else:
                 result["minkabu"] = None
         except Exception:
