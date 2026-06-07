@@ -86,7 +86,7 @@ function CommentsSection({ comments }) {
                   {r.post_datetime ?? '—'}
                 </td>
                 <td className="px-3 py-2 text-slate-300 align-top leading-relaxed">{r.body ?? '—'}</td>
-                <td className="px-3 py-2 text-slate-500 align-top whitespace-nowrap">{r.author ?? '—'}</td>
+                <td className="px-3 py-2 text-slate-500 align-top whitespace-nowrap">{r.author ? r.author.slice(0, 12) : '—'}</td>
               </tr>
             ))}
           </tbody>
