@@ -55,11 +55,46 @@ function DatasetDots({ datasets }) {
   )
 }
 
+function fmtScraped(ts) {
+  if (!ts) return '—'
+  // ISO string: "2026-06-07T18:58:04.851260" → "2026-06-07 18:58:04"
+  return ts.slice(0, 19).replace('T', ' ')
+}
+
+function SortIcon({ active, dir }) {
+  if (!active) return <span className="ml-1 text-slate-700">↕</span>
+  return <span className="ml-1 text-emerald-400">{dir === 'asc' ? '↑' : '↓'}</span>
+}
+
+const COLS = [
+  { id: 'bbs_rank',      label: 'Rank' },
+  { id: 'ticker',        label: 'Ticker' },
+  { id: 'last_seen',     label: 'Last Seen' },
+  { id: 'last_scraped',  label: 'Last Scraped' },
+  { id: 'speed',         label: 'Speed' },
+]
+
+function sortVal(t, col) {
+  switch (col) {
+    case 'bbs_rank':     return t.bbs_rank ?? 9999
+    case 'ticker':       return t.ticker ?? ''
+    case 'last_seen':    return t.last_seen ?? ''
+    case 'last_scraped': return t.last_scraped_at ?? ''
+    case 'speed': {
+      const h = t.speed_history
+      return h && h.length > 0 ? h[h.length - 1].comments_per_hour : -1
+    }
+    default: return ''
+  }
+}
+
 export default function Tickers() {
   const [tickers, setTickers] = useState([])
   const [meta, setMeta] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
+  const [sortCol, setSortCol] = useState('bbs_rank')
+  const [sortDir, setSortDir] = useState('asc')
 
   useEffect(() => {
     getTickers()
@@ -71,7 +106,21 @@ export default function Tickers() {
   if (loading) return <Spinner />
   if (error) return <ErrorMsg msg={error} />
 
-  const sorted = [...tickers].sort((a, b) => (a.bbs_rank ?? 9999) - (b.bbs_rank ?? 9999))
+  function handleSort(col) {
+    if (col === sortCol) {
+      setSortDir(d => d === 'asc' ? 'desc' : 'asc')
+    } else {
+      setSortCol(col)
+      setSortDir('asc')
+    }
+  }
+
+  const sorted = [...tickers].sort((a, b) => {
+    const av = sortVal(a, sortCol)
+    const bv = sortVal(b, sortCol)
+    const cmp = typeof av === 'number' ? av - bv : String(av).localeCompare(String(bv))
+    return sortDir === 'asc' ? cmp : -cmp
+  })
 
   return (
     <div>
@@ -84,11 +133,16 @@ export default function Tickers() {
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-slate-800 text-slate-500 text-xs uppercase tracking-wider">
-              <th className="text-left px-4 py-3 w-16">Rank</th>
-              <th className="text-left px-4 py-3">Ticker</th>
-              <th className="text-left px-4 py-3">Last Seen</th>
-              <th className="text-left px-4 py-3">Last Scraped</th>
-              <th className="text-left px-4 py-3">Speed</th>
+              {COLS.map((col) => (
+                <th
+                  key={col.id}
+                  className="text-left px-4 py-3 cursor-pointer select-none hover:text-slate-300 whitespace-nowrap"
+                  onClick={() => handleSort(col.id)}
+                >
+                  {col.label}
+                  <SortIcon active={sortCol === col.id} dir={sortDir} />
+                </th>
+              ))}
               <th className="text-left px-4 py-3">Datasets</th>
             </tr>
           </thead>
@@ -122,8 +176,8 @@ export default function Tickers() {
                   <td className="px-4 py-2.5 text-slate-400 font-mono text-xs">
                     {t.last_seen ?? '—'}
                   </td>
-                  <td className="px-4 py-2.5 text-slate-400 font-mono text-xs">
-                    {t.last_scraped_at ?? '—'}
+                  <td className="px-4 py-2.5 text-slate-400 font-mono text-xs whitespace-nowrap">
+                    {fmtScraped(t.last_scraped_at)}
                   </td>
                   <td className="px-4 py-2.5">
                     {latestSpeed != null ? (
