@@ -287,7 +287,7 @@ class Synthesizer:
     def _build_en_context(self, news: list[dict]) -> str:
         lines = [f"Today: {datetime.now().strftime('%Y-%m-%d')}", ""]
         lines.append("## Recent News Headlines (past 48h)")
-        lines.append("Sources: NHK Business, Google News (JP economy, semiconductors, AI infrastructure, robotics, pharma)")
+        lines.append("Sources: Google News (JP economy, semiconductors, AI infrastructure, robotics, pharma)")
         lines.append("")
         for item in news[:60]:
             source = item.get("source", "")

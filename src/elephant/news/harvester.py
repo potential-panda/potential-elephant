@@ -11,8 +11,6 @@ from elephant.framework import Harvester, HarvesterResult, Store
 # Curated set of feeds covering JP market news and US macro context.
 # feedparser handles encoding and date quirks across formats.
 RSS_FEEDS = [
-    # NHK Business/Economy — reliable public JP broadcaster
-    {"source": "nhk_business", "url": "https://www.nhk.or.jp/rss/news/cat4.xml", "lang": "ja"},
     # Google News RSS — topic-scoped, broad coverage
     # (Reuters public RSS feeds were discontinued)
     {
