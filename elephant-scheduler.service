@@ -1,0 +1,17 @@
+[Unit]
+Description=Elephant Investment Research Scheduler
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/lulurun/workspace/potential-elephant
+Environment=PYTHONPATH=src
+Environment=PATH=/home/lulurun/.pyenv/versions/3.13.9/bin:/usr/local/bin:/usr/bin:/bin
+ExecStart=/home/lulurun/.pyenv/versions/3.13.9/bin/python src/cli.py schedule
+Restart=always
+RestartSec=60
+StandardOutput=append:/panda-infra/elephant/scheduler.log
+StandardError=append:/panda-infra/elephant/scheduler.log
+
+[Install]
+WantedBy=default.target
