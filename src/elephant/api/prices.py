@@ -23,10 +23,12 @@ def _pct_change(df: pd.DataFrame, days: int) -> float | None:
         return None
     latest_date = df["date"].max()
     cutoff = latest_date - timedelta(days=days)
-    past = df[df["date"] <= cutoff]
-    if past.empty:
+    # Allow up to 7 calendar days of tolerance to handle weekends/holidays
+    # at the boundary — take the last available bar on or just after the cutoff.
+    window = df[df["date"] <= cutoff + timedelta(days=7)]
+    if window.empty:
         return None
-    start_close = float(past.iloc[-1]["close"])
+    start_close = float(window.iloc[-1]["close"])
     end_close = float(df.iloc[-1]["close"])
     if start_close == 0:
         return None
