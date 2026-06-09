@@ -32,7 +32,7 @@ class PricePlanner(Planner):
             tasks.append(HarvesterTask(
                 harvester=PriceHarvester(self.store, ticker),
                 scheduled_at=scheduled_at,
-                args={},
+                args={"period": "10d"},
             ))
 
         random.shuffle(tasks)

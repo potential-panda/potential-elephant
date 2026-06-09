@@ -20,9 +20,9 @@ class PriceHarvester(Harvester):
 
     async def scrape(self, url: str, params: dict) -> dict[str, HarvesterResult]:
         import asyncio
-        return await asyncio.to_thread(self._fetch)
+        return await asyncio.to_thread(self._fetch, params.get("period", "max"))
 
-    def _fetch(self) -> dict[str, HarvesterResult]:
+    def _fetch(self, period: str = "max") -> dict[str, HarvesterResult]:
         try:
             import yfinance as yf
         except ImportError:
@@ -31,7 +31,7 @@ class PriceHarvester(Harvester):
 
         try:
             t = yf.Ticker(self.ticker)
-            hist = t.history(period="1y", interval="1d", auto_adjust=True)
+            hist = t.history(period=period, interval="1d", auto_adjust=True)
             if hist.empty:
                 logging.warning(f"[Price] No data for {self.ticker}")
                 return {}
