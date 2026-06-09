@@ -20,7 +20,7 @@ class PriceHarvester(Harvester):
 
     async def scrape(self, url: str, params: dict) -> dict[str, HarvesterResult]:
         import asyncio
-        return await asyncio.to_thread(self._fetch, params.get("period", "max"))
+        return await asyncio.to_thread(self._fetch, params.get("period", "2y"))
 
     def _fetch(self, period: str = "max") -> dict[str, HarvesterResult]:
         try:
