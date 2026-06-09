@@ -24,6 +24,7 @@ from elephant.tdnet.harvester import TDnetHarvester
 from elephant.tdnet.planner import TDnetPlanner
 from elephant.yjp_bbs_rank.harvester import BbsRankHarvester
 from elephant.yjp_bbs_rank.planner import BbsRankPlanner
+from elephant.price.planner import PricePlanner
 
 TICKERS_FILE = "/panda-infra/elephant/tickers.txt"
 DATA_DIR = "/panda-infra/elephant"
@@ -552,8 +553,9 @@ def schedule_cmd(args):
     minkabu_planner = MinkabuPlanner(store, TICKERS_FILE, tree_path=TREE_PATH)
     news_planner = NewsPlanner(store)
     tdnet_planner = TDnetPlanner(store)
+    price_planner = PricePlanner(store, TICKERS_FILE, tree_path=TREE_PATH)
 
-    multi_planner = MultiPlanner([bbs_rank_planner, yjp_planner, minkabu_planner, news_planner, tdnet_planner])
+    multi_planner = MultiPlanner([bbs_rank_planner, yjp_planner, minkabu_planner, news_planner, tdnet_planner, price_planner])
     scheduler = Scheduler(multi_planner)
 
     if args.dry_run:

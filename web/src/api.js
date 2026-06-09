@@ -33,6 +33,9 @@ export const getDiveLatest = (ticker) => apiFetch(`/dive/${ticker}/latest`)
 
 export const getJob = (jobId) => apiFetch(`/jobs/${jobId}`)
 
+export const getPriceChanges = (tickers) =>
+  apiFetch(`/prices?tickers=${encodeURIComponent(tickers.join(','))}`)
+
 export const getStats = () => apiFetch('/stats')
 
 export const queryDataset = ({ dataset, ticker, keyword, limit = 50 }) => {

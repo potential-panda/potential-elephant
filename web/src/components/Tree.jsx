@@ -1,23 +1,23 @@
 import { useState, useEffect } from 'react'
-import { getTree } from '../api'
+import { getTree, getPriceChanges } from '../api'
 import StorageFooter from './StorageFooter'
 
 const LAYER_STYLE = {
   source: {
     header: 'text-purple-400 border-purple-900',
-    chip: 'bg-purple-900/40 text-purple-200 border-purple-700/50 hover:border-purple-500/70',
+    chip: 'bg-purple-900/30 border-purple-700/50 hover:border-purple-400/60',
   },
   upper: {
     header: 'text-blue-400 border-blue-900',
-    chip: 'bg-blue-900/40 text-blue-200 border-blue-700/50 hover:border-blue-500/70',
+    chip: 'bg-blue-900/30 border-blue-700/50 hover:border-blue-400/60',
   },
   middle: {
     header: 'text-emerald-400 border-emerald-900',
-    chip: 'bg-emerald-900/40 text-emerald-200 border-emerald-700/50 hover:border-emerald-500/70',
+    chip: 'bg-emerald-900/30 border-emerald-700/50 hover:border-emerald-400/60',
   },
   lower: {
     header: 'text-amber-400 border-amber-900',
-    chip: 'bg-amber-900/40 text-amber-200 border-amber-700/50 hover:border-amber-500/70',
+    chip: 'bg-amber-900/30 border-amber-700/50 hover:border-amber-400/60',
   },
 }
 
@@ -28,35 +28,56 @@ const LAYER_LABELS = {
   lower: 'Lower Stream',
 }
 
-function TickerChip({ node }) {
+const PERIODS = ['1y', '6m', '3m', '1m']
+
+function pctColor(v) {
+  if (v == null) return 'text-slate-600'
+  return v >= 0 ? 'text-emerald-400' : 'text-red-400'
+}
+
+function PctValue({ v }) {
+  if (v == null) return <span className="text-slate-700">—</span>
+  return (
+    <span className={pctColor(v)}>
+      {v >= 0 ? '+' : ''}{v.toFixed(1)}%
+    </span>
+  )
+}
+
+function TickerChip({ node, priceData }) {
   const style = LAYER_STYLE[node.layer] || {
-    chip: 'bg-slate-800 text-slate-300 border-slate-700 hover:border-slate-500',
+    chip: 'bg-slate-800/60 border-slate-700 hover:border-slate-500',
   }
+  const p = priceData || {}
+
   return (
     <a
       href={`#detail/${node.ticker}`}
       className={[
-        'inline-flex flex-col px-3 py-2 rounded border text-xs transition-colors',
+        'inline-flex flex-col px-3 py-2 rounded border text-xs transition-colors min-w-[100px]',
         style.chip,
       ].join(' ')}
     >
-      <span className="font-mono font-bold">{node.ticker}</span>
-      {node.name && (
-        <span className="opacity-60 mt-0.5 max-w-[140px] truncate">{node.name}</span>
-      )}
-      {node.role && (
-        <span className="opacity-40 mt-0.5 max-w-[140px] truncate">{node.role}</span>
-      )}
+      <span className="font-mono font-bold text-slate-100 mb-1.5">{node.ticker}</span>
+      <div className="grid grid-cols-2 gap-x-2 gap-y-0.5 font-mono text-[10px]">
+        {PERIODS.map((period) => (
+          <div key={period} className="flex items-center justify-between gap-1">
+            <span className="text-slate-600">{period}</span>
+            <PctValue v={p[period]} />
+          </div>
+        ))}
+      </div>
     </a>
   )
 }
 
-function LayerSection({ layer, nodes }) {
+function LayerSection({ layer, nodes, prices }) {
   const style = LAYER_STYLE[layer] || { header: 'text-slate-400 border-slate-800' }
+  const headerColor = style.header.split(' ')[0]
   return (
-    <div className="mb-6">
+    <div className="mb-8">
       <div className={['flex items-center gap-2 mb-3 pb-2 border-b', style.header].join(' ')}>
-        <span className={['text-xs font-semibold uppercase tracking-widest', style.header.split(' ')[0]].join(' ')}>
+        <span className={['text-xs font-semibold uppercase tracking-widest', headerColor].join(' ')}>
           {LAYER_LABELS[layer] || layer}
         </span>
         <span className="text-slate-700 text-xs">{nodes.length} node{nodes.length !== 1 ? 's' : ''}</span>
@@ -66,7 +87,7 @@ function LayerSection({ layer, nodes }) {
       ) : (
         <div className="flex flex-wrap gap-2">
           {nodes.map((node, i) => (
-            <TickerChip key={i} node={node} />
+            <TickerChip key={i} node={node} priceData={prices[node.ticker]} />
           ))}
         </div>
       )}
@@ -79,6 +100,8 @@ export default function Tree() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [activeRiver, setActiveRiver] = useState(null)
+  const [prices, setPrices] = useState({})
+  const [pricesLoading, setPricesLoading] = useState(false)
 
   useEffect(() => {
     getTree()
@@ -89,6 +112,19 @@ export default function Tree() {
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false))
   }, [])
+
+  // Fetch prices whenever active river changes
+  useEffect(() => {
+    if (!tree || !activeRiver) return
+    const river = tree.rivers.find((r) => r.id === activeRiver)
+    if (!river || !river.nodes.length) return
+    const tickers = river.nodes.map((n) => n.ticker)
+    setPricesLoading(true)
+    getPriceChanges(tickers)
+      .then(setPrices)
+      .catch(() => setPrices({}))
+      .finally(() => setPricesLoading(false))
+  }, [activeRiver, tree])
 
   if (loading) return (
     <div className="flex items-center gap-2 text-slate-500 py-8">
@@ -121,7 +157,7 @@ export default function Tree() {
   return (
     <div>
       {/* River tabs */}
-      <div className="flex gap-1 mb-6 border-b border-slate-800 pb-0">
+      <div className="flex gap-1 mb-6 border-b border-slate-800">
         {rivers.map((r) => (
           <button
             key={r.id}
@@ -144,11 +180,25 @@ export default function Tree() {
           {river.description && (
             <p className="text-slate-500 text-sm mb-6">{river.description}</p>
           )}
+
+          {/* Period legend + loading indicator */}
+          <div className="flex items-center gap-4 mb-4">
+            <div className="flex items-center gap-3 text-[10px] font-mono text-slate-600">
+              {PERIODS.map((p) => (
+                <span key={p}>{p}</span>
+              ))}
+            </div>
+            {pricesLoading && (
+              <div className="w-3 h-3 border-t-2 border-emerald-500 rounded-full animate-spin" />
+            )}
+          </div>
+
           {layers.map((layer) => (
             <LayerSection
               key={layer}
               layer={layer}
               nodes={nodesByLayer[layer] || []}
+              prices={prices}
             />
           ))}
         </div>
