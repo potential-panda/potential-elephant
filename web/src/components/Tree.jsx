@@ -83,10 +83,17 @@ function TickerChip({ node, priceData, avgs }) {
       ].join(' ')}
     >
       {/* Ticker + 1y absolute */}
-      <div className="flex items-baseline justify-between gap-2 mb-1">
+      <div className="flex items-baseline justify-between gap-2 mb-0.5">
         <span className="font-mono font-bold text-slate-100">{node.ticker}</span>
         <PctValue v={p['1y']} />
       </div>
+
+      {/* Company name */}
+      {node.name && (
+        <div className="text-[10px] text-slate-500 truncate mb-1" title={node.role || node.name}>
+          {node.name}
+        </div>
+      )}
 
       {/* vs layer — primary signal */}
       <div className={['font-mono text-[11px] font-semibold mb-1.5', vsLayerColor(delta1y)].join(' ')}>
