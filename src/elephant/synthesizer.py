@@ -243,45 +243,76 @@ class Synthesizer:
 
     def _build_jp_context(
         self,
-        tickers: list[str],
-        evaluations: dict[str, dict],
+        candidates: list[dict],
         minkabu: dict[str, str],
-        prices: dict[str, dict],
-        speed: dict[str, list],
-        names: dict[str, str],
         tdnet: list[dict],
     ) -> str:
         lines = [f"Today: {datetime.now().strftime('%Y-%m-%d')}", ""]
-        lines.append("## BBS Hot Tickers (Yahoo Finance Japan — ranked by discussion volume)")
-        lines.append("Columns: BBS rank | ticker (company name) | sentiment | 1-month price change | comment speed (c/h, newest first)")
-        lines.append("")
-        for i, ticker in enumerate(tickers[:40], 1):
-            ev = evaluations.get(ticker)
-            pr = prices.get(ticker)
-            sp = speed.get(ticker)
-            name = names.get(ticker, "")
-            label = f"{ticker} ({name})" if name and name != ticker else ticker
-            sentiment = ""
-            if ev:
-                bull = ev["strongest"] + ev["strong"]
-                bear = ev["weak"] + ev["weakest"]
-                sentiment = f"Bull {bull:.0f}% | Neutral {ev['both']:.0f}% | Bear {bear:.0f}%"
-            price_str = f"{pr['chg_1mo']:+.1f}% 1mo" if pr else ""
-            speed_str = "speed " + " → ".join(f"{h['comments_per_hour']:.1f}" for h in sp) if sp else ""
-            parts = [sentiment, price_str, speed_str]
-            suffix = "  |  ".join(p for p in parts if p)
-            lines.append(f"{i:2}. {label}  {suffix}".rstrip())
+
+        def fmt(c: dict) -> str:
+            name   = f" ({c['name']})" if c.get("name") else ""
+            river  = f" [{c['river_id']}/{c['layer']}]" if c.get("river_id") else ""
+            laggard = f" lag {c['laggard_gap_1y']:+.1f}% vs layer" if c.get("laggard_gap_1y") is not None else ""
+            bull   = f" bull {c['bull_pct']:.0f}%" if c.get("bull_pct") is not None else ""
+            bear   = f" bear {c['bear_pct']:.0f}%" if c.get("bear_pct") is not None else ""
+            ret1m  = f" {c['return_1m']:+.1f}% 1m" if c.get("return_1m") is not None else ""
+            speed  = ""
+            if c.get("speed_latest") is not None:
+                speed = f" speed {c['speed_latest']:.1f}"
+                if c.get("speed_prev") is not None:
+                    speed += f"→{c['speed_prev']:.1f} c/h"
+                if c.get("speed_trend") == "accel":
+                    speed += " ↑"
+            rank   = f" BBS#{c['bbs_rank']}" if c.get("bbs_rank") and c.get("bbs_today") else ""
+            tdnet_flag = " [TDnet]" if c.get("has_tdnet_48h") else ""
+            mink_flag  = " [Minkabu]" if c.get("has_minkabu") else ""
+            score  = f" score:{c['score']}"
+            return f"  {c['ticker']}{name}{river}{laggard}{bull}{bear}{ret1m}{speed}{rank}{tdnet_flag}{mink_flag}{score}"
+
+        # Queue A: River Candidates
+        qa = [c for c in candidates if c["queue"] == "A"]
+        if qa:
+            lines.append("## Queue A — River Candidates (confirmed theme, not yet re-rated)")
+            lines.append("These tickers fit a known thematic wave but have not caught up with layer peers.")
+            lines.append("")
+            for c in qa[:20]:
+                lines.append(fmt(c))
+                lines.append(f"    reason: {c['queue_reason']}")
+
+        # Queue B: Holding Signals
+        qb = [c for c in candidates if c["queue"] == "B"]
+        if qb:
+            lines.append("")
+            lines.append("## Queue B — Holding Signals (price down, thesis intact)")
+            lines.append("Price has fallen recently but sentiment remains bullish. Worth checking if thesis still holds.")
+            lines.append("")
+            for c in qb[:10]:
+                lines.append(fmt(c))
+                lines.append(f"    reason: {c['queue_reason']}")
+
+        # Queue C: Crowd Heat / Noise
+        qc = [c for c in candidates if c["queue"] == "C"]
+        if qc:
+            lines.append("")
+            lines.append("## Queue C — Crowd Heat / Noise (no confirmed river fit)")
+            lines.append("High BBS activity but no confirmed thematic river fit. Surface for awareness only.")
+            lines.append("")
+            for c in qc[:15]:
+                lines.append(fmt(c))
+
         if tdnet:
             lines.append("")
-            lines.append("## 適時開示（TDnet）— 直近48h・監視銘柄のみ")
+            lines.append("## 適時開示（TDnet）— 直近48h")
             for item in tdnet:
                 lines.append(f"  [{item['date']} {item['time']}] {item['ticker']} {item['company']} — {item['title']}")
+
         if minkabu:
             lines.append("")
             lines.append("## Minkabu アナリストコンセンサス（直近データ）")
             for ticker, text in list(minkabu.items())[:15]:
                 lines.append(f"\n### {ticker}")
                 lines.append(text)
+
         return "\n".join(lines)
 
     def _build_en_context(self, news: list[dict]) -> str:
@@ -332,19 +363,26 @@ class Synthesizer:
             return resp.content[0].text
 
     def generate(self) -> str:
+        from elephant.candidates import CandidateMetrics
         since = datetime.now() - timedelta(hours=48)
-        tickers = self._load_tickers()
 
-        if not tickers:
+        tree_path = os.path.join(self.data_dir, "river_tree.json") if self.tree else None
+        candidates = CandidateMetrics(self.data_dir, self.tickers_file, tree_path=tree_path).build()
+
+        if not candidates:
             return "No tickers found. Run `python src/cli.py fetch --dataset yjp_bbs_rank` first."
 
-        evaluations = self._load_evaluations(tickers, since)
-        minkabu = self._load_minkabu(tickers, since)
+        # Minkabu text is still passed to the LLM for narrative richness
+        all_tickers = [c["ticker"] for c in candidates]
+        minkabu = self._load_minkabu(all_tickers, since)
         news = self._load_news(since)
-        prices = self._load_prices(tickers[:40])
-        speed = self._load_speed(tickers[:40])
-        names = self._load_names(tickers[:40])
-        tdnet = self._load_tdnet(tickers, since)
+        tdnet = self._load_tdnet(all_tickers, since)
+        names = self._load_names(all_tickers[:40])
+        # Back-fill names into candidates that didn't have them cached
+        for c in candidates:
+            if not c.get("name") and names.get(c["ticker"]):
+                c["name"] = names[c["ticker"]]
+
         date_str = datetime.now().strftime("%Y-%m-%d")
 
         river_context = ""
@@ -356,24 +394,26 @@ class Synthesizer:
         jp_system = f"""\
 あなたは自己投資家向けのデイリーダイジェストを書く金融リサーチスカウトです。
 
-投資家の目標：まだ気づいていない銘柄・セクター・テーマを発見すること。
-保有期間は数週間〜数ヶ月。ヒントを見てから自分で調査します。{river_context}
+投資家の戦略：テーマ波（確認済みリバー）の中で、まだ市場に再評価されていない銘柄を探す。
+保有期間は数週間〜数ヶ月。ヒントは調査のきっかけであり、売買シグナルではない。{river_context}
+
+入力データはすでに3つのキューに分類されています：
+- Queue A: リバー適合 + レイヤー平均比で出遅れ → 最優先で調査価値あり
+- Queue B: 株価下落中だが強気センチメント維持 → テーゼ継続確認
+- Queue C: BBS熱量あり、リバー適合なし → 注目のみ、調査優先度は低い
 
 ## 出力フォーマット
 
-以下のヒントタイプから3〜4件、日本語で書いてください：
-- [NEW NAME]: リバーツリーにない銘柄で、BBS活動が異常に高い、コメント速度（c/h）が急加速している、または強気センチメントが強い
-- [HOLDING SIGNAL]: 直近1ヶ月で株価が下落（1mo欄がマイナス）しているにも関わらず、強気センチメントが高い水準を維持している銘柄 — 底堅さの確認価値あり
-- [SECTOR THEME]: 同じセクターの複数銘柄が類似したシグナルを示している
+Queue A から最大2件、Queue B から最大1件、Queue C から最大1件を選び、以下の形式で書いてください：
 
-コメント速度（speed欄）の読み方：「最新 → 前日 → 前々日」の順。急加速（例：1.2 → 3.5 → 8.0）は注目に値する。
+- [RIVER CANDIDATE]: Queue Aの銘柄。なぜこの銘柄がリバーに適合し、なぜ出遅れているか説明する。
+- [HOLDING SIGNAL]: Queue Bの銘柄。株価下落にもかかわらず強気センチメントが維持されている理由を説明する。
+- [CROWD HEAT]: Queue Cの銘柄。BBS熱量の理由を説明し、リバー適合がない旨を明記する。
 
-各ヒント：3〜5行。「→ 注目の価値あり」または「→ 確認の価値あり」で締めること。
-どのシグナルがヒントのトリガーになったか明記（BBS順位、強気比率、コメント速度、TDnet開示、Minkabuコンセンサスなど）。
-適時開示（TDnet）がある銘柄は、開示内容がセンチメントと一致しているか相反しているかを必ず確認すること。
-リバーツリーにある銘柄はHOLDING SIGNALでない限り提案しないこと。
-トーン：意見ははっきりと、でも謙虚に。「注目の価値あり」であって「買え」ではない。
-ヘッダー行は出力しないこと（=== Elephant Digest... の行は不要）。\
+各ヒント：3〜5行。「→ 調査の価値あり」または「→ 確認の価値あり」で締めること。
+トリガーとなったシグナル（スコア、出遅れ幅、BBS速度、TDnet、Minkabuなど）を必ず明記すること。
+TDnet開示がある銘柄は、開示内容がセンチメントと一致・相反どちらかを確認すること。
+トーン：意見ははっきりと、でも謙虚に。ヘッダー行（=== Elephant...）は出力しないこと。\
 """
 
         # --- Call 2: English hints from news + river tree ---
@@ -394,7 +434,7 @@ Tone: opinionated but humble.
 Do NOT output a header line (no === Elephant Digest... line).\
 """
 
-        jp_hints = self._llm(jp_system, self._build_jp_context(tickers, evaluations, minkabu, prices, speed, names, tdnet))
+        jp_hints = self._llm(jp_system, self._build_jp_context(candidates, minkabu, tdnet))
         en_hints = self._llm(en_system, self._build_en_context(news))
 
         return (

@@ -14,7 +14,8 @@ class YahooFinancePlanner(Planner):
         self.tree_path = tree_path
 
     def create(self) -> List[HarvesterTask]:
-        tickers = get_tickers(self.tickers_file, tree_path=self.tree_path)
+        from elephant.ticker_registry import is_jp_ticker
+        tickers = [t for t in get_tickers(self.tickers_file, tree_path=self.tree_path) if is_jp_ticker(t)]
         if not tickers:
             return []
 

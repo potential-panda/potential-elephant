@@ -31,6 +31,11 @@ def normalize_ticker(ticker: str) -> str:
     return ticker
 
 
+def is_jp_ticker(ticker: str) -> bool:
+    """Returns True for Tokyo Stock Exchange tickers (e.g. 8105.T, 6920.T)."""
+    return ticker.endswith(".T")
+
+
 def _cache_path(tickers_file: str) -> Path:
     return Path(tickers_file).with_suffix(".cache.json")
 

@@ -11,7 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from elephant.api import datasets, detail, digest, dive, prices, schedule_status, tickers, tree
+from elephant.api import candidates, datasets, detail, digest, dive, prices, schedule_status, tickers, tree
 
 app = FastAPI(title="Elephant Research Dashboard", version="1.0.0")
 
@@ -118,6 +118,13 @@ def api_job_status(job_id: str):
 @app.get("/api/detail/{ticker}")
 def api_detail(ticker: str):
     return detail.get_detail(ticker)
+
+
+# --- Candidates ---
+
+@app.get("/api/candidates")
+def api_candidates(queue: str = Query(None, description="Filter by queue: A, B, or C")):
+    return candidates.get_candidates(queue=queue)
 
 
 # --- Prices ---

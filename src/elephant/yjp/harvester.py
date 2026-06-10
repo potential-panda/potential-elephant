@@ -32,8 +32,13 @@ def generate_id(*args):
 class YahooFinanceHarvester(Harvester):
     def __init__(self, store: Store, ticker: str, tickers_file: Optional[str] = None):
         super().__init__(store)
-        if not ticker.endswith(".T"):
-            ticker = f"{ticker}.T"
+        from elephant.ticker_registry import normalize_ticker, is_jp_ticker
+        ticker = normalize_ticker(ticker)
+        if not is_jp_ticker(ticker):
+            raise ValueError(
+                f"YahooFinanceHarvester only supports JP (.T) tickers — got {ticker!r}. "
+                "US tickers have no Yahoo Finance Japan BBS page."
+            )
         self.ticker = ticker
         self.tickers_file = tickers_file
         self.latest_ids = self._load_latest_ids()
