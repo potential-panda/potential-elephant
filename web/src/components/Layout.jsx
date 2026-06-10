@@ -1,12 +1,13 @@
 const TABS = [
-  { id: 'digest',   label: 'Digest'   },
-  { id: 'detail',   label: 'Detail'   },
-  { id: 'dive',     label: 'Dive'     },
-  { id: 'query',    label: 'Query'    },
-  { id: 'tree',     label: 'Tree'     },
-  { id: 'tickers',  label: 'Tickers'  },
-  { id: 'schedule', label: 'Schedule' },
-  { id: 'stats',    label: 'Stats'    },
+  { id: 'candidates', label: 'Candidates' },
+  { id: 'digest',     label: 'Digest'     },
+  { id: 'detail',     label: 'Detail'     },
+  { id: 'dive',       label: 'Dive'       },
+  { id: 'query',      label: 'Query'      },
+  { id: 'tree',       label: 'Tree'       },
+  { id: 'tickers',    label: 'Tickers'    },
+  { id: 'schedule',   label: 'Schedule'   },
+  { id: 'stats',      label: 'Stats'      },
 ]
 
 export default function Layout({ activeTab, onTabChange, children }) {

@@ -1,9 +1,5 @@
-import os
 from elephant.candidates import CandidateMetrics
-
-DATA_DIR = "/panda-infra/elephant"
-TICKERS_FILE = os.path.join(DATA_DIR, "tickers.txt")
-TREE_PATH = os.path.join(DATA_DIR, "river_tree.json")
+from elephant.config import DATA_DIR, TICKERS_FILE, TREE_PATH
 
 
 def get_candidates(queue: str | None = None) -> list[dict]:

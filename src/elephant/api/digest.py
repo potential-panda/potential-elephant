@@ -4,8 +4,7 @@ import uuid
 from datetime import datetime
 from pathlib import Path
 
-DATA_DIR = "/panda-infra/elephant"
-TICKERS_FILE = "/panda-infra/elephant/tickers.txt"
+from elephant.config import DATA_DIR, TICKERS_FILE
 
 _jobs: dict[str, dict] = {}
 

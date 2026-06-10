@@ -4,7 +4,7 @@ from datetime import datetime, timedelta
 
 import pandas as pd
 
-DATA_DIR = "/panda-infra/elephant"
+from elephant.config import DATA_DIR
 
 
 def _load_prices(ticker: str) -> pd.DataFrame:

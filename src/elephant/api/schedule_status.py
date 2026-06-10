@@ -1,5 +1,10 @@
+import os
 import subprocess
 from datetime import datetime
+
+from elephant.config import DATA_DIR
+
+_LOG_FILE = os.path.join(DATA_DIR, "scheduler.log")
 
 
 def get_status() -> dict:
@@ -31,7 +36,7 @@ def get_status() -> dict:
             "state": f"{active} ({sub})",
             "pid": int(pid) if pid.isdigit() else None,
             "since": since,
-            "log_file": "/panda-infra/elephant/scheduler.log",
+            "log_file": _LOG_FILE,
         }
     except Exception as e:
         return {"active": False, "state": "error", "pid": None, "since": None,

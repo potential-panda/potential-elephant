@@ -4,7 +4,8 @@ import uuid
 from datetime import datetime
 from pathlib import Path
 
-DATA_DIR = "/panda-infra/elephant"
+from elephant.config import DATA_DIR
+
 DIVES_DIR = Path(DATA_DIR) / "dives"
 
 _jobs: dict[str, dict] = {}

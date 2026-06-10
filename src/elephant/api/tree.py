@@ -1,6 +1,6 @@
 import os
 
-DATA_DIR = "/panda-infra/elephant"
+from elephant.config import DATA_DIR
 
 
 def get_tree() -> dict:

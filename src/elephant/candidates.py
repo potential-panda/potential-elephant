@@ -421,5 +421,23 @@ class CandidateMetrics:
                 "queue_reason":  reason,
             })
 
+        # Apply suppression penalty — suppressed "pass" tickers get score capped at 5
+        # and are moved to queue C so they don't consume attention
+        try:
+            from elephant.decisions import is_suppressed, get as get_decision
+            for row in rows:
+                t = row["ticker"]
+                if is_suppressed(t):
+                    row["score"] = min(row["score"], 5)
+                    row["queue"] = "C"
+                    dec = get_decision(t)
+                    row["queue_reason"] = f"suppressed until {dec['suppress_until']}: {dec.get('reason','')}"
+                    row["suppressed"] = True
+                else:
+                    row["suppressed"] = False
+        except Exception:
+            for row in rows:
+                row.setdefault("suppressed", False)
+
         rows.sort(key=lambda r: r["score"], reverse=True)
         return rows

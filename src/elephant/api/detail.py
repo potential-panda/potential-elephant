@@ -4,9 +4,8 @@ from datetime import datetime, timedelta
 
 import pandas as pd
 
+from elephant.config import DATA_DIR
 from elephant.ticker_registry import normalize_ticker
-
-DATA_DIR = "/panda-infra/elephant"
 
 
 def _normalize(ticker: str) -> tuple[str, str]:

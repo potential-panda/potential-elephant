@@ -9,6 +9,7 @@ import pandas as pd
 from qate.util.dt_range import DtRange
 
 import elephant.secrets as _secrets
+from elephant.config import DATA_DIR, TICKERS_FILE, TREE_PATH
 from elephant.framework import HarvesterTask, Planner, Scheduler, Store
 from elephant.minkabu.harvester import MinkabuHarvester
 from elephant.minkabu.planner import MinkabuPlanner
@@ -25,10 +26,6 @@ from elephant.tdnet.planner import TDnetPlanner
 from elephant.yjp_bbs_rank.harvester import BbsRankHarvester
 from elephant.yjp_bbs_rank.planner import BbsRankPlanner
 from elephant.price.planner import PricePlanner
-
-TICKERS_FILE = "/panda-infra/elephant/tickers.txt"
-DATA_DIR = "/panda-infra/elephant"
-TREE_PATH = os.path.join(DATA_DIR, "river_tree.json")
 
 _secrets.load()
 
@@ -542,6 +539,46 @@ def _auto_add(tree: RiverTree, result: dict) -> None:
         print(f"  -> Could not add: {e}")
 
 
+# --- decision ---
+
+
+def decision_cmd(args):
+    from elephant.decisions import is_suppressed, list_all, record, remove
+
+    if args.decision_cmd == "record":
+        entry = record(
+            ticker=args.ticker,
+            decision=args.decision,
+            reason=args.reason or "",
+            suppress_days=args.suppress_days,
+            what_would_change=args.what_would_change or "",
+        )
+        print(f"Recorded: {entry['ticker']} → {entry['decision']}")
+        if entry.get("suppress_until"):
+            print(f"  Suppressed until: {entry['suppress_until']}")
+
+    elif args.decision_cmd == "list":
+        entries = list_all()
+        if not entries:
+            print("No decisions recorded.")
+            return
+        print(f"\n{'Ticker':<12} {'Decision':<16} {'Date':<12} {'Suppress Until':<14} Reason")
+        print("-" * 80)
+        for e in entries:
+            sup = e.get("suppress_until") or ""
+            marker = " [suppressed]" if is_suppressed(e["ticker"]) else ""
+            print(f"{e['ticker']:<12} {e['decision']:<16} {e.get('date',''):<12} {sup:<14} {e.get('reason','')[:40]}{marker}")
+
+    elif args.decision_cmd == "remove":
+        if remove(args.ticker):
+            print(f"Removed decision for {args.ticker}")
+        else:
+            print(f"No decision found for {args.ticker}")
+
+    else:
+        print("Unknown decision subcommand.")
+
+
 # --- schedule ---
 
 
@@ -673,6 +710,22 @@ def main():
     tickers_parser = subparsers.add_parser("tickers", help="List tickers with harvested data in the last N days")
     tickers_parser.add_argument("--days", type=int, default=14, help="Lookback window in days (default: 14)")
 
+    decision_parser = subparsers.add_parser("decision", help="Record or review pass/watch/river_candidate decisions")
+    decision_subs = decision_parser.add_subparsers(dest="decision_cmd")
+
+    dec_record = decision_subs.add_parser("record", help="Record a decision for a ticker")
+    dec_record.add_argument("--ticker", required=True)
+    dec_record.add_argument("--decision", required=True, choices=["pass", "watch", "river_candidate"])
+    dec_record.add_argument("--reason", default="")
+    dec_record.add_argument("--suppress-days", type=int, default=30, dest="suppress_days",
+                            help="Days to suppress (for pass decisions, default 30)")
+    dec_record.add_argument("--what-would-change", default="", dest="what_would_change")
+
+    decision_subs.add_parser("list", help="List all recorded decisions")
+
+    dec_rm = decision_subs.add_parser("remove", help="Remove a decision entry")
+    dec_rm.add_argument("--ticker", required=True)
+
     args = parser.parse_args()
 
     if args.command == "fetch":
@@ -691,6 +744,8 @@ def main():
         dive_cmd(args)
     elif args.command == "tickers":
         tickers_cmd(args)
+    elif args.command == "decision":
+        decision_cmd(args)
     else:
         parser.print_help()
 

@@ -86,6 +86,8 @@ class Diver:
         try:
             df = pd.concat([pd.read_parquet(f) for f in files], ignore_index=True)
             df["scraped_at"] = pd.to_datetime(df["scraped_at"])
+            for col in ("strongest", "strong", "both", "weak", "weakest"):
+                df[col] = pd.to_numeric(df.get(col, 0), errors="coerce").fillna(0.0)
             df["bull"] = df["strongest"] + df["strong"]
             df["bear"] = df["weak"] + df["weakest"]
             return df.sort_values("scraped_at")
@@ -161,6 +163,61 @@ class Diver:
             return "\n".join(parts)
         return "Not currently in the river tree."
 
+    def _river_peer_comparison(self, ticker_t: str) -> str:
+        """Build a table comparing this ticker's returns vs its layer peers."""
+        if not self.tree:
+            return ""
+        matches = self.tree.find_ticker(ticker_t)
+        if not matches:
+            return ""
+
+        import math
+        from datetime import timedelta
+        import pandas as pd
+
+        def _load_pct(t: str, days: int) -> float | None:
+            path = os.path.join(
+                self.data_dir, "dataset=daily_prices", f"ticker={t}", "data.parquet"
+            )
+            if not os.path.exists(path):
+                return None
+            try:
+                df = pd.read_parquet(path)
+                df["date"] = pd.to_datetime(df["date"])
+                df = df.sort_values("date")
+                if df.empty:
+                    return None
+                latest = df["date"].max()
+                cutoff = latest - timedelta(days=days)
+                window = df[df["date"] <= cutoff + timedelta(days=7)]
+                if window.empty:
+                    return None
+                start = float(window.iloc[-1]["close"])
+                end = float(df.iloc[-1]["close"])
+                if start == 0:
+                    return None
+                r = (end - start) / start * 100
+                return round(r, 1) if math.isfinite(r) else None
+            except Exception:
+                return None
+
+        lines = []
+        for river, node in matches:
+            peers = [n for n in river.nodes if n.layer == node.layer]
+            header = f"River peers: {river.name} / {node.layer}"
+            lines.append(header)
+            lines.append(f"{'Ticker':<12} {'1m':>6} {'3m':>6} {'6m':>6} {'1y':>7}")
+            lines.append("-" * 38)
+            for peer in sorted(peers, key=lambda n: n.ticker):
+                r1m = _load_pct(peer.ticker, 30)
+                r3m = _load_pct(peer.ticker, 90)
+                r6m = _load_pct(peer.ticker, 180)
+                r1y = _load_pct(peer.ticker, 365)
+                marker = " ←" if peer.ticker == ticker_t else ""
+                fmt = lambda v: f"{v:+.0f}%" if v is not None else "  n/a"
+                lines.append(f"{peer.ticker:<12} {fmt(r1m):>6} {fmt(r3m):>6} {fmt(r6m):>6} {fmt(r1y):>7}{marker}")
+        return "\n".join(lines)
+
     # --- Context builder ---
 
     def _build_context(self, ticker: str) -> str:
@@ -234,6 +291,12 @@ class Diver:
 
         lines.append("## River Tree Position")
         lines.append(self._river_position(ticker_t))
+
+        peer_table = self._river_peer_comparison(ticker_t)
+        if peer_table:
+            lines.append("")
+            lines.append("## River Peer Comparison")
+            lines.append(peer_table)
 
         return "\n".join(lines)
 
@@ -320,6 +383,10 @@ Key price observations: where it sits in its 52w range, recent momentum, volume 
 ## River Fit
 Does this belong in one of the 4 rivers (ai_infra, tech_local, physical_ai, longevity)?
 Which layer? Or is it a speculative outlier with no clean fit?
+If the company produces materials, components, or specialty chemicals for electronics/semiconductors,
+consider whether it fits as a middle-layer supplier in tech_local or ai_infra before concluding "no fit".
+If a River Peer Comparison table is provided above, explicitly compare this ticker's returns vs
+its layer peers and note whether it is a laggard, in-line, or leader relative to those peers.
 
 ## Verdict
 3–5 sentences. Worth investigating further, or noise? What would change your mind?

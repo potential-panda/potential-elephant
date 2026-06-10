@@ -8,8 +8,10 @@ import Dive from './components/Dive'
 import Query from './components/Query'
 import Stats from './components/Stats'
 import Detail from './components/Detail'
+import Candidates from './components/Candidates'
 
 const TAB_COMPONENTS = {
+  candidates: Candidates,
   tickers: Tickers,
   digest: Digest,
   schedule: Schedule,

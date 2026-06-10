@@ -12,6 +12,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from elephant.api import candidates, datasets, detail, digest, dive, prices, schedule_status, tickers, tree
+from elephant import decisions as _decisions
 
 app = FastAPI(title="Elephant Research Dashboard", version="1.0.0")
 
@@ -133,6 +134,39 @@ def api_candidates(queue: str = Query(None, description="Filter by queue: A, B, 
 def api_prices(tickers: str = Query(..., description="Comma-separated ticker list")):
     ticker_list = [t.strip() for t in tickers.split(",") if t.strip()]
     return prices.get_price_changes(ticker_list)
+
+
+# --- Decisions ---
+
+class DecisionRequest(BaseModel):
+    ticker: str
+    decision: str
+    reason: str = ""
+    suppress_days: int = 30
+    what_would_change: str = ""
+
+
+@app.post("/api/decisions")
+def api_decision_record(req: DecisionRequest):
+    entry = _decisions.record(
+        ticker=req.ticker,
+        decision=req.decision,
+        reason=req.reason,
+        suppress_days=req.suppress_days,
+        what_would_change=req.what_would_change,
+    )
+    return entry
+
+
+@app.get("/api/decisions")
+def api_decision_list():
+    return _decisions.list_all()
+
+
+@app.delete("/api/decisions/{ticker}")
+def api_decision_remove(ticker: str):
+    removed = _decisions.remove(ticker)
+    return {"removed": removed, "ticker": ticker}
 
 
 # --- Datasets ---

@@ -3,10 +3,8 @@ from datetime import datetime
 
 import pandas as pd
 
+from elephant.config import DATA_DIR, TICKERS_FILE
 from elephant.ticker_registry import load_cache
-
-DATA_DIR = "/panda-infra/elephant"
-TICKERS_FILE = "/panda-infra/elephant/tickers.txt"
 
 
 def get_tickers() -> list[dict]:

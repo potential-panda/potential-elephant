@@ -4,7 +4,7 @@ from datetime import datetime, timedelta
 
 import pandas as pd
 
-DATA_DIR = "/panda-infra/elephant"
+from elephant.config import DATA_DIR
 NEWS_DAYS = 5  # match harvester.py
 DATASETS = ["yahoo_comments", "yahoo_evaluations", "minkabu_raw_html", "news_headlines", "tdnet_disclosures"]
 
