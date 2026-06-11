@@ -34,14 +34,6 @@ function CandidateRow({ row, onDecision }) {
           <div style={{ color: '#e2eaf2', fontFamily: 'monospace', fontSize: 13, fontWeight: 600 }}>{row.ticker}</div>
           {row.name && <div style={{ color: '#5a7080', fontSize: 11, marginTop: 1 }}>{row.name}</div>}
         </td>
-        {/* Queue */}
-        <td className="py-2 px-2" style={{ whiteSpace: 'nowrap' }}>
-          <span style={{
-            fontFamily: 'monospace', fontSize: 10, fontWeight: 700, letterSpacing: '0.08em',
-            color: qc.color, border: `1px solid ${qc.border}`, borderRadius: 3, padding: '2px 6px',
-            background: qc.bg,
-          }}>{row.queue}</span>
-        </td>
         {/* Score */}
         <td className="py-2 px-2 text-right" style={{ color: '#bfcfdf', fontSize: 12, fontFamily: 'monospace' }}>
           {row.score}
@@ -85,7 +77,7 @@ function CandidateRow({ row, onDecision }) {
       </tr>
       {expanded && (
         <tr style={{ background: 'rgba(0,0,0,0.2)' }}>
-          <td colSpan={11} className="px-4 py-3">
+          <td colSpan={10} className="px-4 py-3">
             <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap', fontSize: 12 }}>
               <div>
                 <span style={{ color: '#5a7080' }}>Reason: </span>
@@ -143,7 +135,7 @@ function QueueTable({ rows, queue, onDecision }) {
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
           <thead>
             <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
-              {['Ticker', 'Q', 'Score', 'River/Layer', 'Lag 1y', '1m', '3m', '1y', 'Bull%', 'BBS', 'Catalyst'].map(h => (
+              {['Ticker', 'Score', 'River/Layer', 'Lag 1y', '1m', '3m', '1y', 'Bull%', 'BBS', 'Catalyst'].map(h => (
                 <th key={h} className="py-2 px-2 text-left"
                   style={{ color: '#3a5060', fontFamily: 'monospace', fontSize: 10, letterSpacing: '0.08em', fontWeight: 600, whiteSpace: 'nowrap' }}>
                   {h}
