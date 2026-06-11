@@ -333,10 +333,10 @@ class CandidateMetrics:
         """
         bbs_tickers = self._load_bbs_tickers()
 
-        # Add river tree JP tickers not already in BBS list
+        # Add all river tree tickers (JP and US) not already in BBS list
         river_nodes = self._load_river_tree()
-        tree_jp = [t for t in river_nodes if t.endswith(".T") and t not in bbs_tickers]
-        all_tickers = bbs_tickers + tree_jp
+        tree_extra = [t for t in river_nodes if t not in bbs_tickers]
+        all_tickers = bbs_tickers + tree_extra
 
         if not all_tickers:
             return []
