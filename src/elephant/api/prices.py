@@ -14,6 +14,7 @@ def _load_prices(ticker: str) -> pd.DataFrame:
     try:
         df = pd.read_parquet(path)
         df["date"] = pd.to_datetime(df["date"])
+        df = df.dropna(subset=["close"])
         return df.sort_values("date")
     except Exception:
         return pd.DataFrame()

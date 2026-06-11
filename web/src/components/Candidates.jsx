@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { APP_BASE } from '../app-base'
 
 const QUEUE_LABELS = {
   A: { label: 'River Candidates', color: '#00dc96', bg: 'rgba(0,220,150,0.08)', border: 'rgba(0,220,150,0.3)' },
@@ -167,16 +168,24 @@ export default function Candidates() {
 
   const load = () => {
     setLoading(true)
-    fetch('/api/candidates')
-      .then(r => r.json())
-      .then(rows => { setData(rows); setLoading(false) })
+    setError(null)
+    fetch(`${APP_BASE}/api/candidates`)
+      .then(r => {
+        if (!r.ok) throw new Error(`${r.status} ${r.statusText}`)
+        return r.json()
+      })
+      .then(rows => {
+        if (!Array.isArray(rows)) throw new Error('unexpected response format')
+        setData(rows)
+        setLoading(false)
+      })
       .catch(e => { setError(String(e)); setLoading(false) })
   }
 
   useEffect(() => { load() }, [])
 
   const handleDecision = (ticker, decision) => {
-    fetch('/api/decisions', {
+    fetch(`${APP_BASE}/api/decisions`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ ticker, decision }),

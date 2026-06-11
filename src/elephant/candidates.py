@@ -152,7 +152,7 @@ class CandidateMetrics:
         try:
             df = pd.read_parquet(path)
             df["date"] = pd.to_datetime(df["date"])
-            df = df.sort_values("date")
+            df = df.dropna(subset=["close"]).sort_values("date")
             return {
                 "1y": _pct_change(df, 365),
                 "6m": _pct_change(df, 180),

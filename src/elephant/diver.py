@@ -184,7 +184,7 @@ class Diver:
             try:
                 df = pd.read_parquet(path)
                 df["date"] = pd.to_datetime(df["date"])
-                df = df.sort_values("date")
+                df = df.dropna(subset=["close"]).sort_values("date")
                 if df.empty:
                     return None
                 latest = df["date"].max()
