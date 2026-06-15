@@ -1,20 +1,22 @@
 # Potential Elephant
 
-A self-directed investment research scout built on the **Thematic Supply Chain Rotation Framework**. It monitors BBS sentiment, analyst consensus, and news signals across JP and US markets, maintains a structured map of investment opportunities ("the river tree"), and surfaces daily hints — stocks, sectors, and themes worth investigating that you probably haven't noticed yet.
+A self-directed investment **research triage system** built on a Thematic Supply Chain Rotation Framework.
+
+It maintains a living map of thematic investment themes ("the river tree"), scores companies on research-worthiness using source-backed evidence, and surfaces a daily shortlist of names worth looking into today — without ever telling you to buy or sell anything.
 
 The system opens doors. You walk through them or not.
 
 ---
 
-## Concept: The River Framework
+## Core Concept
 
-Major macro trends flow like rivers — capital moves from a source through upstream enablers, into middle-stream bottlenecks (the highest-alpha layer), and out through lower-stream capacity constraints.
+Major macro trends flow like rivers — capital moves from a source through upstream enablers into middle-stream bottlenecks (highest alpha), then out through lower-stream capacity constraints.
 
 ```
-Source (CapEx) → Upper Stream (core designers) → Middle Stream (bottlenecks ★) → Lower Stream (infrastructure)
+Source (CapEx) → Upper Stream (core enablers) → Middle Stream (bottlenecks ★) → Lower Stream (infrastructure)
 ```
 
-The system maintains a **River Tree** — a structured map of instruments across 4 rivers:
+Four rivers are tracked:
 
 | River | Theme |
 |---|---|
@@ -23,45 +25,164 @@ The system maintains a **River Tree** — a structured map of instruments across
 | `physical_ai` | Embodied Physical AI |
 | `longevity` | Demographic Longevity |
 
+The **River Tree** is the human-curated knowledge base at the center of everything. Every node reflects a deliberate decision: this company has a specific supply-chain role in this theme.
+
 ---
 
-## How It Works
+## Dashboard
 
-There are two data sources and one human-in-the-loop workflow that connects them.
+The dashboard runs at `http://localhost:9765` (or wherever `elephant-api` is bound).
 
-### Data Source 1 — Yahoo BBS Pipeline (automated)
+It has five primary views described below.
 
-```
-BBS Ranking → tickers.txt (LRU cache) → per-ticker scraping → Parquet storage
-```
+---
 
-- **`yjp_bbs_rank`**: scrapes Yahoo Finance JP's daily BBS activity ranking and writes `tickers.txt` — an LRU cache (TTL=7 days, max=300 tickers). The backing `tickers.cache.json` records `last_seen`, `last_scraped_at`, and `speed_history` (comments per hour, one entry per scrape day) for each ticker.
-- **`yahoo_comments` + `yahoo_evaluations`**: for every ticker in `tickers.txt`, scrapes BBS discussion posts and the bull/bear sentiment graph.
-- **`minkabu_raw_html`**: scrapes Minkabu analyst consensus pages for the same tickers.
-- **`news_headlines`**: 7 RSS feeds (NHK Business, Google News — JP economy, semiconductors, AI infra, robotics, biotech, power grid).
+## The Candidates Page
 
-All scraped data is stored as Hive-partitioned Parquet under `$DATA_DIR`.
+**Daily use. Open this first.**
 
-### Data Source 2 — River Tree (manual, human-curated)
+The Candidates page scores every tracked ticker on *research-worthiness* — not investment merit. A high score means "this name deserves 30 minutes of your attention today", not "buy this".
 
-```
-You → tree node-add/update/remove → river_tree.json
-```
+### Queues
 
-The River Tree is a structured knowledge database of instruments you've already evaluated and decided to track. It is **never written automatically** — every entry reflects a deliberate decision. You add tickers after a deep dive confirms they belong.
+Candidates are split into three queues:
 
-### Workflow — Discovery → Deep Dive → Tree Update
+| Queue | Label | Meaning |
+|---|---|---|
+| **A** | River Candidates | Deserves research today. Has real source-backed evidence, fits a confirmed river, and scores ≥ 70. |
+| **B** | Known Node / Monitor | Approved or watched nodes with new disclosures, peer-relative divergence, or stale thesis risk. Score ≥ 40. |
+| **C** | Crowd Heat / Noise | Active BBS attention but no confirmed river fit or source-backed catalyst. Do not prioritize. |
+| Suppressed | — | Recently passed names hidden until suppression expires or a qualifying new catalyst appears. |
 
-```
-digest (daily hints) ──┐
-discover (scan BBS)  ──┼──► dive --ticker X ──► tree node-add  (or ignore)
-discover --keyword   ──┘
-```
+**Queue A is the only queue that requires your attention daily.** Queue B is a weekly monitor. Queue C is background awareness — it explains why a name is hot without recommending you act.
 
-1. **`digest`** runs two LLM calls daily: one on JP sources (BBS rankings + Minkabu, in Japanese) and one on EN sources (news + river tree gaps, in English). Produces 5–7 hints: `[NEW NAME]`, `[HOLDING SIGNAL]`, `[SECTOR THEME]`, `[RIVER GAP]`, `[MACRO OBSERVATION]`.
-2. **`discover`** scans BBS hot tickers not yet in the tree, or searches news by keyword, and uses Claude to classify each ticker into a river and layer.
-3. **`dive --ticker X`** produces a full research brief: company overview, BBS sentiment trend, Minkabu consensus, price context, news mentions, and a river fit verdict (`→ Add to watchlist | → River candidate | → Pass for now`).
-4. You decide. If it belongs, `tree node-add` promotes it into the river.
+### Score Columns
+
+| Column | What it means |
+|---|---|
+| Score | Final research-worthiness score 0–100 |
+| River/Layer | Which river and supply-chain layer this ticker belongs to |
+| Lag 1y | How far this ticker lags behind its same-layer peers (1-year return). Negative = lagging peers. |
+| 1m / 3m / 1y | Price returns over 1 month, 3 months, 1 year |
+| Bull% | Yahoo BBS bull sentiment percentage |
+| BBS | Yahoo BBS rank today (● = seen today) |
+| Catalyst | TD = TDnet disclosure in last 48h · MK = Minkabu data available |
+
+### Expanded Row — Score Breakdown
+
+Click any row to expand it. You'll see:
+
+**Score Breakdown (D1–D6):**
+
+| Dimension | Max | What it measures |
+|---|---|---|
+| D1 river fit | 25 | How strongly this ticker belongs to a confirmed river. 25 = active/weak node in primary river. 0 = no river connection. |
+| D2 layer alpha | 15 | Layer momentum — peers moving up (+8), thin layer (+5), sparse coverage (+2). |
+| D3 relative laggard | 20 | How far this ticker lags same-layer peers on 4-week and 12-week returns. Lagging = potential catch-up. |
+| D4 catalyst | 20 | Quality and freshness of source-backed evidence: TDnet disclosures, policy events, company IR. Decays over 14 days. |
+| D5 attention change | 10 | New attention signals: BBS rank improving, comment velocity up >20%, new Minkabu/analyst coverage. |
+| D6 coverage gap | 10 | Research coverage gap — no analyst coverage scores higher than crowded coverage. Only counts if D1 > 0. |
+
+**Adjustments shown below the breakdown:**
+- `memory adj` — penalty for previously passed names (−10, −20, or −25 depending on pass count)
+- `noise` — noise penalty (most negative single penalty wins, they don't stack):
+  - BBS top 20 with no catalyst: −15
+  - BBS top 10 + falling price: −20
+  - Prior pump-and-retreat pattern: −10
+  - Generic theme tag only: −8
+
+**Evidence Packet** — every source item that contributed to the score, with:
+- Role: `CATALYST` (company disclosure), `EVIDENCE` (river-supporting), `CONTEXT`, `ATTENTION` (BBS), `RISK`
+- Source tier (1 = regulatory/government, 2 = TDnet/company primary, 3 = trade press, 4 = financial press, 5–6 = commentary/BBS)
+- Freshness in days
+- Points contributed
+
+**Flags:**
+- `weak_peer_set` — D3 = 0 because fewer than 3 active/weak peers have price history
+- `Blocked:` — why a name didn't qualify for a higher queue
+- `Suppressed until` — when suppression expires and pass count
+
+### Decision Actions
+
+Expand a row to record your decision. All decisions are appended (not overwritten) and persist decision memory across sessions.
+
+| Button | Decision | Effect |
+|---|---|---|
+| **Pass** | `pass` | Suppresses this ticker for 28 days (1st pass), 42 days (2nd), or 84 days (3rd+). Score gets a memory penalty. |
+| **Watch** | `watch` | Marks as being monitored. No suppression. |
+| **River Candidate** | `river_candidate` | Flags for potential tree promotion. Appears in Watchlist. |
+| **Research** | `needs_manual_research` | Marks for manual deep-dive within 7 days. |
+
+Suppression resets early if a qualifying new catalyst appears — the threshold scales up with pass count (requires progressively stronger evidence from higher-tier sources).
+
+You can optionally type a reason before clicking. The **Show suppressed** button reveals suppressed names for audit.
+
+---
+
+## The Maintenance Page (Queue D)
+
+**Weekly use. Not score-driven.**
+
+Queue D is completely separate from the daily scoring queues. It surfaces *tree maintenance work* — structural issues in the river tree that need a human decision. These are not ranked by research-worthiness; they are operational tasks.
+
+### Trigger Types
+
+| Trigger | Meaning | Suggested action |
+|---|---|---|
+| **Proposed Node** (high) | A ticker was added as `proposed` and is awaiting approval or rejection | Approve with thesis + falsification condition, or reject with reason |
+| **Thin Layer** (medium) | A river layer has fewer than 3 active/weak nodes — D3 scoring is disabled for this layer | Add nodes, or resolve as intentional |
+| **Missing Falsification** (medium) | An active/weak/watch node has no `what_would_change_our_mind` set | Add the exit condition to define when the thesis ends |
+| **Multi-River Conflict** (medium) | Same ticker appears in more than one river | Set `primary_river` on the correct assignment, or remove duplicates |
+| **Stale Node** (low) | An active/weak/watch node hasn't been reviewed in 90+ days | Review thesis, update `last_reviewed`, or demote to dormant |
+
+### How Resolution Works
+
+Each item has a stable ID. When you resolve it:
+1. Click **Resolve** on the item
+2. Choose an action (e.g. `approved`, `added_falsification`, `acknowledged`)
+3. Optionally add a reason
+4. Click **Confirm**
+
+The resolution is persisted. That item will not reappear **unless the underlying tree state changes** (e.g. a new node gets added to the same thin layer, which recomputes the fingerprint). This prevents Queue D from becoming a static noise list.
+
+### Node Lifecycle
+
+Nodes in the tree have six lifecycle states:
+
+| Status | Meaning |
+|---|---|
+| `proposed` | Source-backed candidate, not yet approved |
+| `active` | Fully accepted, currently monitored |
+| `weak` | Relevant but evidence is thin or stale |
+| `watch` | Interesting, waiting for stronger evidence |
+| `dormant` | Structurally relevant but quiet — excluded from active layer counts and daily queues |
+| `rejected` | Reviewed and not a fit; kept for institutional memory |
+
+Only `active` and `weak` nodes count toward layer totals for D2 and D3 scoring. Dormant nodes are invisible to daily scoring but preserved in the tree.
+
+---
+
+## What This System Does Not Do
+
+- No buy, sell, hold, or price target recommendations
+- No portfolio construction advice
+- No automated trading actions
+- No fully automated node promotion (every tree change requires a human decision)
+- No LLM-generated score facts — every score point traces back to a specific source
+
+---
+
+## Data Sources
+
+| Source | Role in scoring |
+|---|---|
+| **TDnet** (timely disclosures) | D4 catalyst — highest weight (Tier 2, 1.0×). Fresh company-primary disclosures. |
+| **Yahoo BBS ranking + comments** | D5 attention change only. Never D1 or D4. BBS-only names are blocked from Queue A. |
+| **Minkabu** | D5 attention (new coverage), D6 coverage gap context, D2 "not crowded" signal |
+| **Price/volume** (yfinance) | D3 relative laggard gap. Not a discovery or catalyst source. |
+| **River Tree** | D1 river fit (primary signal), D2 peer set |
+
+Source tiers: 1 (regulatory/government) · 2 (company primary/TDnet) · 3 (specialist trade press) · 4 (general financial press) · 5–6 (commentary/BBS, zero weight in D4)
 
 ---
 
@@ -69,128 +190,66 @@ discover --keyword   ──┘
 
 ```bash
 pip install playwright playwright-stealth duckdb pandas pyarrow anthropic feedparser schedule
-pip install potential-panda-core  # internal dependency
+pip install potential-panda-core
 playwright install chromium
 
 export ANTHROPIC_API_KEY=sk-...
+export ELEPHANT_DATA_DIR=/path/to/data   # default: /panda-infra/elephant
 ```
 
----
-
-## Quick Start
+Start the dashboard (also available as a systemd user service — see `elephant-api.service`):
 
 ```bash
-# 1. Initialise the river tree with the V1 ticker universe (48 instruments)
-python src/cli.py tree init
-
-# 2. View the tree
-python src/cli.py tree show
-
-# 3. Fetch fresh signals (BBS ranking + news)
-python src/cli.py fetch --dataset yjp_bbs_rank
-python src/cli.py fetch --dataset news_headlines
-
-# 4. Generate today's digest
-python src/cli.py digest
+python src/api.py
 ```
 
 ---
 
 ## CLI Reference
 
-### Data Collection
+### Daily Data Collection
 
 ```bash
-# Fetch data for testing (2 random tickers)
-python src/cli.py fetch --dataset yahoo_comments
-python src/cli.py fetch --dataset yahoo_evaluations
-python src/cli.py fetch --dataset minkabu_raw_html
-python src/cli.py fetch --dataset yjp_bbs_rank      # updates tickers.txt with hot stocks
-python src/cli.py fetch --dataset news_headlines     # RSS: NHK, Reuters, Google News
-
-# Run the long-running daily scheduler
-python src/cli.py schedule
-python src/cli.py schedule --dry-run    # preview the day's task plan
+python src/cli.py fetch --dataset yjp_bbs_rank       # BBS hot tickers → tickers.txt
+python src/cli.py fetch --dataset news_headlines      # RSS: NHK, Reuters, Google News
+python src/cli.py fetch --dataset yahoo_evaluations   # BBS bull/bear sentiment
+python src/cli.py fetch --dataset minkabu_raw_html    # Minkabu analyst pages
+python src/cli.py schedule                            # run the daily scheduler
+python src/cli.py schedule --dry-run                  # preview task plan
 ```
-
-### Digest
-
-```bash
-python src/cli.py digest
-```
-
-Generates a Daily Digest using Claude — 5-8 hints of type:
-- `[NEW NAME]` — a ticker not yet in the river tree with unusual BBS activity
-- `[RIVER GAP]` — an empty or thin layer in a known river worth filling
-- `[HOLDING SIGNAL]` — sentiment holding strong despite a price drop
-- `[SECTOR THEME]` — multiple tickers pointing at the same theme
-- `[MACRO OBSERVATION]` — a macro or currency angle worth watching
-
-Saved to `$DATA_DIR/digests/YYYY-MM-DD.md`.
 
 ### River Tree
 
 ```bash
-# View
 python src/cli.py tree show
 python src/cli.py tree show --river ai_infra
 
-# Initialise with V1 ticker universe
-python src/cli.py tree init
+# Add a node after completing a deep dive
+python src/cli.py tree node-add --river ai_infra --ticker 6146.T --layer middle \
+    --name "Disco Corp" --market JP --role "Chemical-mechanical planarization equipment"
 
-# Rivers
-python src/cli.py tree river-add --id <id> --name <name> [--description <text>]
-python src/cli.py tree river-remove --id <id>
-
-# Nodes
-python src/cli.py tree node-add --river <id> --ticker <ticker> --layer <layer> \
-    [--name <name>] [--market US|JP] [--role <text>] [--notes <text>]
-python src/cli.py tree node-update --river <id> --ticker <ticker> [--layer <layer>] \
-    [--name <name>] [--role <text>] [--notes <text>]
-python src/cli.py tree node-remove --river <id> --ticker <ticker>
-
-# Tag news to a ticker
-python src/cli.py tree news-add --ticker <ticker> --title <title> --url <url> --source <source>
+python src/cli.py tree node-update --river ai_infra --ticker 6146.T \
+    --status active --notes "confirmed semiconductor exposure"
+python src/cli.py tree node-remove --river ai_infra --ticker 6146.T
 ```
 
 Layers: `source` · `upper` · `middle` · `lower`
 
-### Discovery
+Node statuses: `proposed` · `active` · `weak` · `watch` · `dormant` · `rejected`
 
-```bash
-# Classify a specific ticker into the river tree
-python src/cli.py discover --ticker 6146.T
-
-# Search recent news by keyword, extract and classify tickers found
-python src/cli.py discover --keyword "optical transceiver"
-
-# Autonomous scan: BBS hot tickers not yet in the tree
-python src/cli.py discover
-
-# Any of the above with --auto to add high-confidence suggestions without prompting
-python src/cli.py discover --auto
-python src/cli.py discover --ticker NBIS --auto
-```
-
-### Deep Dive
+### Research Tools
 
 ```bash
 # Full research brief on a single ticker
-python src/cli.py dive --ticker 8105.T
-python src/cli.py dive --ticker NVDA
-```
+python src/cli.py dive --ticker 6146.T
 
-Produces a structured brief with: company overview, BBS sentiment trend, Minkabu consensus,
-price context (yfinance), news mentions, river fit assessment, and a verdict.
-Saved to `$DATA_DIR/dives/YYYY-MM-DD-{ticker}.md` (and `.html` with clickable links).
+# Classify a ticker or keyword into the river tree
+python src/cli.py discover --ticker 6146.T
+python src/cli.py discover --keyword "optical transceiver"
+python src/cli.py discover              # autonomous BBS scan
 
-### Query Stored Data
-
-```bash
-python src/cli.py query --dataset yahoo_comments --ticker 7203
-python src/cli.py query --dataset yahoo_comments --ticker 7203 --start 2026-03-01 --end 2026-03-16
-python src/cli.py query --dataset yahoo_evaluations --ticker 7203
-python src/cli.py query --dataset minkabu_raw_html --ticker 7203
+# Generate today's digest (LLM)
+python src/cli.py digest
 ```
 
 ---
@@ -199,80 +258,60 @@ python src/cli.py query --dataset minkabu_raw_html --ticker 7203
 
 ```
 src/elephant/
-  framework.py            # Store, Harvester, Planner, Scheduler base classes
-  tickers.py              # Read/sample tickers.txt
+  candidates.py           # D1–D6 scoring, queue assignment, evidence packet builder
+  scoring.py              # Score functions for each dimension (stateless, testable)
+  scoring_config.py       # Calibration constants (thresholds, keywords, tier weights)
+  decisions.py            # Decision log — pass/watch/river_candidate/needs_manual_research
+  maintenance.py          # Queue D generation from tree state + resolution log
 
-  yjp/                    # Yahoo Finance JP BBS scraper
-    harvester.py          #   comments + buy/sell evaluations per ticker
-    planner.py            #   randomised daily schedule
+  river/
+    tree.py               # RiverTree, River, Node (lifecycle v2), JSON persistence
+    discoverer.py         # Claude-powered ticker classification
 
+  api/
+    candidates.py         # GET /api/candidates
+    tree.py               # GET /api/tree (with lifecycle metadata)
+    maintenance.py        # GET /api/maintenance + POST /api/maintenance/{id}/resolve
+
+  yjp_bbs_rank/           # Yahoo BBS rank scraper (28-day cache with daily rank)
+  yjp/                    # Yahoo BBS comments + sentiment
   minkabu/                # Minkabu analyst consensus scraper
-    harvester.py          #   analysis / research / pick / consensus pages (raw HTML)
-    planner.py
-
-  yjp_bbs_rank/           # Yahoo Finance BBS activity ranking
-    harvester.py          #   scrapes hot tickers → writes tickers.txt
-    planner.py
-
+  tdnet/                  # TDnet timely disclosure scraper
   news/                   # RSS news harvester
-    harvester.py          #   NHK Business, Reuters, Google News (JP economy / semi / AI)
-    planner.py            #   3x daily schedule
 
-  tdnet/                  # TDnet timely disclosure harvester
-    harvester.py          #   scrapes release.tdnet.info, filters to watched tickers
-    planner.py            #   4x daily on market days (8, 12, 15, 18 JST)
-
-  river/                  # River Tree — the knowledge database
-    tree.py               #   RiverTree, River, Node, NewsItem + JSON persistence
-    discoverer.py         #   Claude-powered ticker classification into rivers
-    seed.py               #   V1 ticker universe (48 instruments, 4 rivers)
-
-  synthesizer.py          # Reads all signals + river tree → calls Claude → digest
-  diver.py                # Deep dive brief on a single ticker (price, BBS, Minkabu, news, river fit)
-  ticker_registry.py      # Shared LRU cache: last_seen, last_scraped_at, speed_history per ticker
-  query_interface.py      # Pandas helpers for external analysis
-
+src/api.py                # FastAPI server
 src/cli.py                # CLI entry point
+web/src/
+  components/
+    Candidates.jsx        # Daily triage — score breakdown, evidence, decision actions
+    Maintenance.jsx       # Queue D — tree maintenance workflow
+    Tree.jsx              # River tree viewer with lifecycle status
+    Watchlist.jsx         # river_candidate watchlist with since-flag returns
 ```
 
 ### Data Storage
 
-All data lives under `$DATA_DIR` (default: `/panda-infra/elephant`):
+All data under `$ELEPHANT_DATA_DIR` (default `/panda-infra/elephant`):
 
 ```
-river_tree.json                                      # river tree knowledge database
-tickers.txt                                          # active ticker list (LRU, plain text)
-tickers.cache.json                                   # LRU cache: last_seen, speed_history per ticker
-digests/YYYY-MM-DD.md                               # daily digests
-dives/YYYY-MM-DD-{ticker}.md                        # deep dive briefs
-dataset=yahoo_comments/ticker={t}/date={d}/         # BBS comments
-dataset=yahoo_evaluations/ticker={t}/YEAR={y}/      # BBS buy/sell evaluation
-dataset=minkabu_raw_html/ticker={t}/YEAR={y}/       # Minkabu analyst pages
-dataset=news_headlines/date={d}/                    # RSS news headlines
+river_tree.json                          # river tree (v2, with lifecycle fields)
+decisions.json                           # decision log (keyed by ticker)
+maintenance_resolutions.json             # Queue D resolution log
+tickers.txt                              # active BBS ticker list
+tickers.cache.json                       # BBS cache: last_seen, speed_history (28-day rank)
+digests/YYYY-MM-DD.md                    # daily LLM digests
+dives/YYYY-MM-DD-{ticker}.md             # deep dive briefs
+dataset=tdnet_disclosures/date={d}/      # TDnet disclosures
+dataset=yahoo_evaluations/ticker={t}/    # BBS bull/bear sentiment
+dataset=minkabu_raw_html/ticker={t}/     # Minkabu pages
+dataset=news_headlines/date={d}/         # RSS headlines
+dataset=daily_prices/ticker={t}/         # price history (yfinance)
 ```
-
-All datasets are Parquet files, partitioned for fast date-range queries.
-
----
-
-## Roadmap
-
-| Step | Status | Description |
-|---|---|---|
-| BBS + Minkabu scraping | ✅ done | Daily sentiment pipeline |
-| News RSS harvester | ✅ done | NHK, Reuters, Google News |
-| Daily Digest (LLM) | ✅ done | Bilingual digest: JP hints (BBS/Minkabu) + EN hints (news/river gaps) |
-| River Tree | ✅ done | Knowledge database with CRUD CLI |
-| Discovery Engine | ✅ done | `discover` command, autonomous + targeted |
-| Deep Dive | ✅ done | `dive --ticker X` — full research brief on demand |
-| Price / volume data | ✅ done | Live yfinance fetch at digest time for top 40 tickers (1-month change) |
-| Comment speed history | ✅ done | Comments/hour per ticker tracked in cache, fed into digest as velocity signal |
-| TDnet integration | ✅ done | JP timely disclosures scraped 4×/day, filtered to watched tickers, included in digest |
 
 ---
 
 ## Docs
 
-- `spec/SPEC.md` — system specification and design rationale
-- `doc/river_framework.md` — Thematic Supply Chain Rotation Framework summary
-- `doc/spec.md` — low-level BBS scraper selectors and schema
+- `doc/river_framework.md` — Thematic Supply Chain Rotation Framework
+- `STRATEGY.md` — the betting philosophy behind the framework
+- `spec/SPEC.md` — system design rationale
