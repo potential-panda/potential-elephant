@@ -17,11 +17,26 @@ def get_tree() -> dict:
                 "market": node.market,
                 "role": node.role,
                 "notes": getattr(node, "notes", ""),
+                "added": node.added,
+                "source": getattr(node, "source", "manual"),
+                # lifecycle fields
+                "status": node.status,
+                "thesis": node.thesis,
+                "counterarguments": node.counterarguments,
+                "confidence": node.confidence,
+                "last_reviewed": node.last_reviewed,
+                "next_review_cadence": node.next_review_cadence,
+                "what_would_change_our_mind": node.what_would_change_our_mind,
+                "last_human_decision": node.last_human_decision,
+                "last_human_decision_date": node.last_human_decision_date,
+                "evidence_refs": node.evidence_refs,
+                "primary_river": node.primary_river,
             })
         rivers.append({
             "id": river.id,
             "name": river.name,
             "description": getattr(river, "description", ""),
+            "status": getattr(river, "status", "active"),
             "nodes": nodes,
         })
     tree_file = os.path.join(DATA_DIR, "river_tree.json")

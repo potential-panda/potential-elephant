@@ -9,9 +9,13 @@ import Query from './components/Query'
 import Stats from './components/Stats'
 import Detail from './components/Detail'
 import Candidates from './components/Candidates'
+import Watchlist from './components/Watchlist'
+import Maintenance from './components/Maintenance'
 
 const TAB_COMPONENTS = {
   candidates: Candidates,
+  maintenance: Maintenance,
+  watchlist:  Watchlist,
   tickers: Tickers,
   digest: Digest,
   schedule: Schedule,

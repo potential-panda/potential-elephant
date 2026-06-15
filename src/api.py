@@ -11,7 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from elephant.api import candidates, datasets, detail, digest, dive, prices, schedule_status, tickers, tree
+from elephant.api import candidates, datasets, detail, digest, dive, maintenance, prices, schedule_status, tickers, tree
 from elephant import decisions as _decisions
 
 app = FastAPI(title="Elephant Research Dashboard", version="1.0.0")
@@ -124,8 +124,11 @@ def api_detail(ticker: str):
 # --- Candidates ---
 
 @app.get("/api/candidates")
-def api_candidates(queue: str = Query(None, description="Filter by queue: A, B, or C")):
-    return candidates.get_candidates(queue=queue)
+def api_candidates(
+    queue: str = Query(None, description="Filter by queue: A, B, C, or suppressed"),
+    include_suppressed: bool = Query(False, description="Include suppressed candidates"),
+):
+    return candidates.get_candidates(queue=queue, include_suppressed=include_suppressed)
 
 
 # --- Prices ---
@@ -142,18 +145,23 @@ class DecisionRequest(BaseModel):
     ticker: str
     decision: str
     reason: str = ""
-    suppress_days: int = 30
+    suppress_days: int = 30  # ignored for "pass" — escalating suppression is automatic
     what_would_change: str = ""
+    snapshot: dict = {}
+    evidence_ids: list = []
 
 
 @app.post("/api/decisions")
 def api_decision_record(req: DecisionRequest):
+    if req.decision not in _decisions.VALID_DECISIONS:
+        raise HTTPException(status_code=400, detail=f"decision must be one of {sorted(_decisions.VALID_DECISIONS)}")
     entry = _decisions.record(
         ticker=req.ticker,
         decision=req.decision,
         reason=req.reason,
         suppress_days=req.suppress_days,
         what_would_change=req.what_would_change,
+        snapshot=req.snapshot,
     )
     return entry
 
@@ -167,6 +175,82 @@ def api_decision_list():
 def api_decision_remove(ticker: str):
     removed = _decisions.remove(ticker)
     return {"removed": removed, "ticker": ticker}
+
+
+# --- Maintenance (Queue D) ---
+
+@app.get("/api/maintenance")
+def api_maintenance():
+    return maintenance.get_maintenance_items()
+
+
+class MaintenanceResolveRequest(BaseModel):
+    action: str
+    reason: str = ""
+
+
+@app.post("/api/maintenance/{maintenance_id}/resolve")
+def api_maintenance_resolve(maintenance_id: str, req: MaintenanceResolveRequest):
+    try:
+        entry = maintenance.resolve_item(maintenance_id, action=req.action, reason=req.reason)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    return entry
+
+
+# --- Watchlist ---
+
+@app.get("/api/watchlist")
+def api_watchlist():
+    from datetime import date as _date
+    from elephant.api.prices import get_price_changes
+
+    flagged = [d for d in _decisions.list_all() if d.get("decision") == "river_candidate"]
+    if not flagged:
+        return []
+
+    tickers = [d["ticker"] for d in flagged]
+    current = get_price_changes(tickers)
+
+    today = _date.today()
+    result = []
+    for dec in flagged:
+        ticker = dec["ticker"]
+        snap = dec.get("snapshot", {})
+        cp = current.get(ticker, {})
+
+        days_since = None
+        flagged_date = dec.get("date", "")
+        if flagged_date:
+            try:
+                days_since = (today - _date.fromisoformat(flagged_date)).days
+            except Exception:
+                pass
+
+        # Return since flag: computed from stored close vs current close
+        since_flag = None
+        snap_close = snap.get("last_close")
+        cur_close = cp.get("last_close")
+        if snap_close and cur_close and snap_close > 0:
+            since_flag = round((cur_close - snap_close) / snap_close * 100, 2)
+
+        result.append({
+            "ticker": ticker,
+            "flagged_date": flagged_date,
+            "days_since": days_since,
+            "reason": dec.get("reason", ""),
+            "snapshot": snap,
+            "current": {
+                "return_1m":  cp.get("1m"),
+                "return_3m":  cp.get("3m"),
+                "return_1y":  cp.get("1y"),
+                "last_close": cur_close,
+                "price_date": cp.get("last_date"),
+            },
+            "since_flag": since_flag,
+        })
+
+    return result
 
 
 # --- Datasets ---

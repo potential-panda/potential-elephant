@@ -7,6 +7,7 @@ from datetime import datetime
 from typing import Optional
 
 LAYERS = ["source", "upper", "middle", "lower"]
+VALID_NODE_STATUSES = {"proposed", "active", "weak", "watch", "dormant", "rejected"}
 LAYER_LABELS = {
     "source": "Source (Capital & Architecture)",
     "upper": "Upper Stream (Primary Engine)",
@@ -57,6 +58,17 @@ class Node:
     notes: str = ""
     added: str = ""
     source: str = "manual"  # "manual" | "discovery"
+    status: str = "active"
+    thesis: str = ""
+    counterarguments: str = ""
+    confidence: str = "medium"
+    last_reviewed: str = ""
+    next_review_cadence: str = "weekly"
+    what_would_change_our_mind: str = ""
+    last_human_decision: str = ""
+    last_human_decision_date: str = ""
+    evidence_refs: list = field(default_factory=list)
+    primary_river: bool = True
 
 
 @dataclass
@@ -64,6 +76,7 @@ class River:
     id: str
     name: str
     description: str = ""
+    status: str = "active"
     nodes: list[Node] = field(default_factory=list)
 
 
@@ -132,6 +145,8 @@ class RiverTree:
         return node
 
     def update_node(self, river_id: str, ticker: str, **kwargs) -> bool:
+        if "status" in kwargs and kwargs["status"] not in VALID_NODE_STATUSES:
+            raise ValueError(f"status must be one of {VALID_NODE_STATUSES}")
         river = self._rivers.get(river_id)
         if not river:
             return False
@@ -189,8 +204,37 @@ class RiverTree:
             with open(self.path, encoding="utf-8") as f:
                 data = json.load(f)
             for r in data.get("rivers", []):
-                nodes = [Node(**n) for n in r.get("nodes", [])]
-                river = River(id=r["id"], name=r["name"], description=r.get("description", ""), nodes=nodes)
+                nodes = [
+                    Node(
+                        ticker=n["ticker"],
+                        layer=n["layer"],
+                        name=n.get("name", ""),
+                        market=n.get("market", "US"),
+                        role=n.get("role", ""),
+                        notes=n.get("notes", ""),
+                        added=n.get("added", ""),
+                        source=n.get("source", "manual"),
+                        status=n.get("status", "active"),
+                        thesis=n.get("thesis", ""),
+                        counterarguments=n.get("counterarguments", ""),
+                        confidence=n.get("confidence", "medium"),
+                        last_reviewed=n.get("last_reviewed", ""),
+                        next_review_cadence=n.get("next_review_cadence", "weekly"),
+                        what_would_change_our_mind=n.get("what_would_change_our_mind", ""),
+                        last_human_decision=n.get("last_human_decision", ""),
+                        last_human_decision_date=n.get("last_human_decision_date", ""),
+                        evidence_refs=n.get("evidence_refs", []),
+                        primary_river=n.get("primary_river", True),
+                    )
+                    for n in r.get("nodes", [])
+                ]
+                river = River(
+                    id=r["id"],
+                    name=r["name"],
+                    description=r.get("description", ""),
+                    status=r.get("status", "active"),
+                    nodes=nodes,
+                )
                 self._rivers[river.id] = river
             for ticker, items in data.get("news", {}).items():
                 self._news[ticker] = [NewsItem(**item) for item in items]
@@ -202,12 +246,13 @@ class RiverTree:
         if dirpath:
             os.makedirs(dirpath, exist_ok=True)
         data = {
-            "version": 1,
+            "version": 2,
             "rivers": [
                 {
                     "id": r.id,
                     "name": r.name,
                     "description": r.description,
+                    "status": r.status,
                     "nodes": [asdict(n) for n in r.nodes],
                 }
                 for r in self._rivers.values()

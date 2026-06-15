@@ -1,8 +1,5 @@
 """
 Regression fixtures for candidate queue classification.
-
-These verify the scoring logic behaves correctly for known reference cases
-without requiring live data — all inputs are injected directly into _score().
 """
 
 import sys
@@ -14,59 +11,83 @@ from elephant.candidates import CandidateMetrics
 
 def score(**kwargs):
     defaults = dict(
-        bbs_rank=None, is_today_bbs=False, speed_trend=None,
-        bull_pct=None, return_1m=None, river_id=None,
+        is_jp=True, bbs_rank=None, is_today_bbs=False, speed_trend=None,
+        speed_latest=None, has_yahoo_jp_bbs=None,
+        bull_pct=None, return_1m=None, return_1y=None, river_id=None,
         laggard_gap=None, has_tdnet=False, has_minkabu=False,
     )
     defaults.update(kwargs)
-    return CandidateMetrics._score(**defaults)
+    return CandidateMetrics._score_legacy(**defaults)
 
 
 class TestQueueAssignment:
     def test_3350_no_river_fit_is_crowd_heat(self):
-        # 3350.T = Metaplanet: high BBS heat, no river fit → must be C
-        s, q, _ = score(bbs_rank=3, is_today_bbs=True, speed_trend="accel",
-                        bull_pct=55, return_1m=-8, river_id=None)
-        assert q == "C", f"3350.T should be queue C (crowd heat), got {q}"
+        # 3350.T = Metaplanet: JP, high BBS heat, no river fit → C
+        s, q, _ = score(is_jp=True, bbs_rank=3, is_today_bbs=True, speed_trend="accel",
+                        speed_latest=15.0, bull_pct=55, return_1m=-8, river_id=None)
+        assert q == "C", f"3350.T should be queue C, got {q}"
 
     def test_8136_no_river_crowd_panic_is_crowd_heat(self):
-        # 8136.T: huge comment spike, negative sentiment, no river fit → C
-        s, q, _ = score(bbs_rank=1, is_today_bbs=True, speed_trend="accel",
-                        bull_pct=20, return_1m=-15, river_id=None)
-        assert q == "C", f"8136.T should be queue C (crowd heat), got {q}"
+        # 8136.T: JP, huge spike, no river fit → C
+        s, q, _ = score(is_jp=True, bbs_rank=1, is_today_bbs=True, speed_trend="accel",
+                        speed_latest=88.0, bull_pct=20, return_1m=-15, river_id=None)
+        assert q == "C", f"8136.T should be queue C, got {q}"
 
-    def test_river_laggard_is_queue_A(self):
-        # A river node that is lagging ≤-10% vs layer → A
-        s, q, _ = score(bbs_rank=5, is_today_bbs=True, speed_trend="stable",
-                        bull_pct=65, return_1m=-5, river_id="tech_local",
-                        laggard_gap=-20.0)
-        assert q == "A", f"river laggard should be queue A, got {q}"
+    def test_jp_river_laggard_is_queue_A(self):
+        s, q, _ = score(is_jp=True, bbs_rank=5, is_today_bbs=True, speed_trend="stable",
+                        speed_latest=8.0, bull_pct=65, return_1m=-5,
+                        river_id="tech_local", laggard_gap=-20.0)
+        assert q == "A", f"JP river laggard should be queue A, got {q}"
 
-    def test_river_bbs_hot_today_is_queue_A(self):
-        # River node, BBS rank ≤30 today → A even without laggard gap
-        s, q, _ = score(bbs_rank=10, is_today_bbs=True, speed_trend="stable",
-                        bull_pct=55, return_1m=-2, river_id="ai_infra",
-                        laggard_gap=None)
-        assert q == "A", f"river + BBS today should be queue A, got {q}"
+    def test_jp_river_bbs_hot_today_is_queue_A(self):
+        s, q, _ = score(is_jp=True, bbs_rank=10, is_today_bbs=True, speed_trend="stable",
+                        speed_latest=12.0, bull_pct=55, return_1m=-2,
+                        river_id="ai_infra", laggard_gap=None)
+        assert q == "A", f"JP river + BBS today should be queue A, got {q}"
+
+    def test_jp_silent_river_node_gets_penalty(self):
+        # JP ticker in river tree but never appeared in BBS → penalty
+        s_silent, _, _ = score(is_jp=True, bbs_rank=None, speed_latest=None,
+                               river_id="ai_infra", laggard_gap=-15.0)
+        s_active, _, _ = score(is_jp=True, bbs_rank=5, is_today_bbs=True,
+                               speed_latest=10.0, river_id="ai_infra", laggard_gap=-15.0)
+        assert s_silent < s_active, "silent JP should score lower than active JP"
 
     def test_holding_signal_is_queue_B(self):
-        # Price down > 5%, bull still strong, no river fit → B
-        s, q, _ = score(bbs_rank=25, is_today_bbs=False, bull_pct=65,
-                        return_1m=-8.0, river_id=None)
+        s, q, _ = score(is_jp=True, bbs_rank=25, is_today_bbs=False, speed_latest=3.0,
+                        bull_pct=65, return_1m=-8.0, river_id=None)
         assert q == "B", f"holding signal should be queue B, got {q}"
 
-    def test_5016_possible_materials_candidate(self):
-        # 5016.T is a semiconductor materials supplier. Once classified
-        # into a river with a laggard gap it should reach queue A.
-        s, q, r = score(bbs_rank=15, is_today_bbs=True, speed_trend="stable",
-                        bull_pct=62, return_1m=-11, river_id="tech_local",
-                        laggard_gap=-18.0, has_minkabu=True)
+    def test_5016_jp_materials_candidate(self):
+        s, q, r = score(is_jp=True, bbs_rank=15, is_today_bbs=True, speed_trend="stable",
+                        speed_latest=6.0, bull_pct=62, return_1m=-11,
+                        river_id="tech_local", laggard_gap=-18.0, has_minkabu=True)
         assert q == "A", f"5016.T river candidate should be A, got {q}"
         assert s > 40, f"score should be meaningful, got {s}"
 
+    def test_smci_us_river_laggard_with_momentum(self):
+        # SMCI: US, huge laggard gap, 1y still low → true laggard bonus, strong 1m
+        s, q, _ = score(is_jp=False, bbs_rank=None, speed_latest=None,
+                        has_yahoo_jp_bbs=None, return_1m=42.0, return_1y=6.0,
+                        river_id="ai_infra", laggard_gap=-170.0)
+        assert q == "A", f"SMCI should be queue A, got {q}"
+        assert s >= 55, f"SMCI score should be ≥55 (true laggard), got {s}"
+
+    def test_us_with_bbs_gets_big_bonus(self):
+        # US stock with Yahoo JP BBS comments → big bonus vs same stock without
+        s_bbs, _, _ = score(is_jp=False, speed_latest=8.0, speed_trend="accel",
+                            has_yahoo_jp_bbs=True, return_1m=5.0,
+                            river_id="ai_infra", laggard_gap=-20.0)
+        s_no_bbs, _, _ = score(is_jp=False, speed_latest=None,
+                               has_yahoo_jp_bbs=False, return_1m=5.0,
+                               river_id="ai_infra", laggard_gap=-20.0)
+        assert s_bbs > s_no_bbs + 15, f"US with BBS ({s_bbs}) should be 15+ pts above no-BBS ({s_no_bbs})"
+
     def test_score_capped_at_100(self):
-        # bbs_rank=0 gives max(0,20-0)=20 BBS pts; total exceeds 100 before cap
-        s, _, _ = score(bbs_rank=0, is_today_bbs=True, speed_trend="accel",
-                        bull_pct=90, return_1m=-20, river_id="ai_infra",
-                        laggard_gap=-30.0, has_tdnet=True, has_minkabu=True)
+        # US stock with all signals maxed:
+        # river(15+20+5=40) + heat(15+8+20=43) + sentiment(15) + catalyst(3) = 101 → capped
+        s, _, _ = score(is_jp=False, bbs_rank=None, speed_latest=8.0, speed_trend="accel",
+                        has_yahoo_jp_bbs=True, bull_pct=90, return_1m=35.0, return_1y=5.0,
+                        river_id="ai_infra", laggard_gap=-170.0,
+                        has_tdnet=False, has_minkabu=True)
         assert s == 100, f"score must be capped at 100, got {s}"

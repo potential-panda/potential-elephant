@@ -12,7 +12,7 @@ from elephant.ticker_registry import load_cache, save_cache
 
 BASE_URL = "https://finance.yahoo.co.jp/stocks/ranking/bbs?market=all&term=daily"
 
-CACHE_TTL_DAYS = 7
+CACHE_TTL_DAYS = 28
 CACHE_MAX_TICKERS = 300
 
 USER_AGENTS = [
@@ -94,10 +94,18 @@ class BbsRankHarvester(Harvester):
 
         cache = load_cache(self.tickers_file)
 
-        # Refresh last_seen for today's ranked tickers
+        # Build 1-indexed rank map for today's tickers
+        bbs_rank = {ticker: i for i, ticker in enumerate(today_tickers, 1)}
+
+        # Refresh last_seen for today's ranked tickers and update rank in speed_history
         for ticker in today_tickers:
             entry = cache.get(ticker) or {"speed_history": []}
             entry["last_seen"] = today_str
+            # Update today's speed_history entry with the rank
+            history = entry.get("speed_history", [])
+            today_entry = next((h for h in history if h.get("date") == today_str), None)
+            if today_entry is not None:
+                today_entry["rank"] = bbs_rank[ticker]
             cache[ticker] = entry
 
         # Evict entries older than TTL (compare last_seen date)
