@@ -32,14 +32,8 @@ def generate_id(*args):
 class YahooFinanceHarvester(Harvester):
     def __init__(self, store: Store, ticker: str, tickers_file: Optional[str] = None):
         super().__init__(store)
-        from elephant.ticker_registry import normalize_ticker, is_jp_ticker
-        ticker = normalize_ticker(ticker)
-        if not is_jp_ticker(ticker):
-            raise ValueError(
-                f"YahooFinanceHarvester only supports JP (.T) tickers — got {ticker!r}. "
-                "US tickers have no Yahoo Finance Japan BBS page."
-            )
-        self.ticker = ticker
+        from elephant.ticker_registry import normalize_ticker
+        self.ticker = normalize_ticker(ticker)
         self.tickers_file = tickers_file
         self.latest_ids = self._load_latest_ids()
 
@@ -111,7 +105,16 @@ class YahooFinanceHarvester(Harvester):
             all_comments = []
             stop_scrolling = False
 
-            if await self._get_page_content(page, url):
+            page_loaded = await self._get_page_content(page, url)
+
+            # For US tickers, persist whether a Yahoo JP BBS page exists so the
+            # planner can skip tickers that have no page on future runs.
+            from elephant.ticker_registry import is_jp_ticker
+            if not is_jp_ticker(self.ticker) and self.tickers_file:
+                from elephant.ticker_registry import mark_yahoo_jp_bbs
+                mark_yahoo_jp_bbs(self.tickers_file, self.ticker, page_loaded)
+
+            if page_loaded:
                 # Extract Evaluation — use class*= to survive CSS module hash changes
                 eval_container = await page.query_selector("[class*='_EvaluationGraph__graph_']")
                 if eval_container:

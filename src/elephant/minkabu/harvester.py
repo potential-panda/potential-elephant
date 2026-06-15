@@ -17,10 +17,11 @@ def generate_id(*args):
 
 
 class MinkabuHarvester(Harvester):
-    def __init__(self, store: Store, ticker: str):
+    def __init__(self, store: Store, ticker: str, tickers_file: str = None):
         super().__init__(store)
         from elephant.ticker_registry import normalize_ticker
         self.ticker = normalize_ticker(ticker)
+        self.tickers_file = tickers_file
         self.is_jp = self.ticker.endswith(".T")
         self.minkabu_ticker = self.ticker.replace(".T", "") if self.is_jp else self.ticker
         self.minkabu_base = "https://minkabu.jp" if self.is_jp else "https://us.minkabu.jp"
@@ -90,6 +91,10 @@ class MinkabuHarvester(Harvester):
                     found_any = True
 
             await browser.close()
+
+            if not self.is_jp and self.tickers_file:
+                from elephant.ticker_registry import mark_minkabu_us
+                mark_minkabu_us(self.tickers_file, self.ticker, found_any)
 
             results = {}
             if found_any:

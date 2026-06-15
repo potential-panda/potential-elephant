@@ -101,3 +101,42 @@ def update_speed(tickers_file: str, ticker: str, comment_count: int, scraped_at:
 def get_speed_history(tickers_file: str, ticker: str) -> list:
     cache = load_cache(tickers_file)
     return cache.get(ticker, {}).get("speed_history", [])
+
+
+def mark_yahoo_jp_bbs(tickers_file: str, ticker: str, has_bbs: bool) -> None:
+    """Persist whether a ticker has a reachable Yahoo JP BBS page."""
+    cache = load_cache(tickers_file)
+    entry = cache.get(ticker) or {}
+    if not isinstance(entry, dict):
+        entry = {}
+    entry["has_yahoo_jp_bbs"] = has_bbs
+    cache[ticker] = entry
+    save_cache(tickers_file, cache)
+
+
+def get_yahoo_jp_bbs_status(cache: dict, ticker: str) -> bool | None:
+    """Return True/False/None (None = not yet probed)."""
+    entry = cache.get(ticker)
+    if not isinstance(entry, dict):
+        return None
+    val = entry.get("has_yahoo_jp_bbs")
+    return val  # True / False / None
+
+
+def mark_minkabu_us(tickers_file: str, ticker: str, has_page: bool) -> None:
+    """Persist whether a US ticker has a reachable us.minkabu.jp page."""
+    cache = load_cache(tickers_file)
+    entry = cache.get(ticker) or {}
+    if not isinstance(entry, dict):
+        entry = {}
+    entry["has_minkabu_us"] = has_page
+    cache[ticker] = entry
+    save_cache(tickers_file, cache)
+
+
+def get_minkabu_us_status(cache: dict, ticker: str) -> bool | None:
+    """Return True/False/None (None = not yet probed)."""
+    entry = cache.get(ticker)
+    if not isinstance(entry, dict):
+        return None
+    return entry.get("has_minkabu_us")
