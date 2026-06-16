@@ -11,7 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from elephant.api import candidates, datasets, detail, digest, dive, maintenance, prices, schedule_status, tickers, tree
+from elephant.api import candidates, datasets, detail, digest, dive, prices, schedule_status, tickers, tree
 from elephant import decisions as _decisions
 
 app = FastAPI(title="Elephant Research Dashboard", version="1.0.0")
@@ -175,27 +175,6 @@ def api_decision_list():
 def api_decision_remove(ticker: str):
     removed = _decisions.remove(ticker)
     return {"removed": removed, "ticker": ticker}
-
-
-# --- Maintenance (Queue D) ---
-
-@app.get("/api/maintenance")
-def api_maintenance():
-    return maintenance.get_maintenance_items()
-
-
-class MaintenanceResolveRequest(BaseModel):
-    action: str
-    reason: str = ""
-
-
-@app.post("/api/maintenance/{maintenance_id}/resolve")
-def api_maintenance_resolve(maintenance_id: str, req: MaintenanceResolveRequest):
-    try:
-        entry = maintenance.resolve_item(maintenance_id, action=req.action, reason=req.reason)
-    except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
-    return entry
 
 
 # --- Watchlist ---

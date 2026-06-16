@@ -119,33 +119,7 @@ You can optionally type a reason before clicking. The **Show suppressed** button
 
 ---
 
-## The Maintenance Page (Queue D)
-
-**Weekly use. Not score-driven.**
-
-Queue D is completely separate from the daily scoring queues. It surfaces *tree maintenance work* — structural issues in the river tree that need a human decision. These are not ranked by research-worthiness; they are operational tasks.
-
-### Trigger Types
-
-| Trigger | Meaning | Suggested action |
-|---|---|---|
-| **Proposed Node** (high) | A ticker was added as `proposed` and is awaiting approval or rejection | Approve with thesis + falsification condition, or reject with reason |
-| **Thin Layer** (medium) | A river layer has fewer than 3 active/weak nodes — D3 scoring is disabled for this layer | Add nodes, or resolve as intentional |
-| **Missing Falsification** (medium) | An active/weak/watch node has no `what_would_change_our_mind` set | Add the exit condition to define when the thesis ends |
-| **Multi-River Conflict** (medium) | Same ticker appears in more than one river | Set `primary_river` on the correct assignment, or remove duplicates |
-| **Stale Node** (low) | An active/weak/watch node hasn't been reviewed in 90+ days | Review thesis, update `last_reviewed`, or demote to dormant |
-
-### How Resolution Works
-
-Each item has a stable ID. When you resolve it:
-1. Click **Resolve** on the item
-2. Choose an action (e.g. `approved`, `added_falsification`, `acknowledged`)
-3. Optionally add a reason
-4. Click **Confirm**
-
-The resolution is persisted. That item will not reappear **unless the underlying tree state changes** (e.g. a new node gets added to the same thin layer, which recomputes the fingerprint). This prevents Queue D from becoming a static noise list.
-
-### Node Lifecycle
+## Node Lifecycle
 
 Nodes in the tree have six lifecycle states:
 
@@ -284,7 +258,6 @@ src/cli.py                # CLI entry point
 web/src/
   components/
     Candidates.jsx        # Daily triage — score breakdown, evidence, decision actions
-    Maintenance.jsx       # Queue D — tree maintenance workflow
     Tree.jsx              # River tree viewer with lifecycle status
     Watchlist.jsx         # river_candidate watchlist with since-flag returns
 ```
@@ -296,7 +269,6 @@ All data under `$ELEPHANT_DATA_DIR` (default `/panda-infra/elephant`):
 ```
 river_tree.json                          # river tree (v2, with lifecycle fields)
 decisions.json                           # decision log (keyed by ticker)
-maintenance_resolutions.json             # Queue D resolution log
 tickers.txt                              # active BBS ticker list
 tickers.cache.json                       # BBS cache: last_seen, speed_history (28-day rank)
 digests/YYYY-MM-DD.md                    # daily LLM digests

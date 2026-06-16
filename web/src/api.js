@@ -38,12 +38,6 @@ export const getPriceChanges = (tickers) =>
 
 export const getStats = () => apiFetch('/stats')
 
-export const getMaintenance = () => apiFetch('/maintenance')
-export const resolveMaintenanceItem = (maintenanceId, action, reason = '') =>
-  apiFetch(`/maintenance/${encodeURIComponent(maintenanceId)}/resolve`, {
-    method: 'POST',
-    body: JSON.stringify({ action, reason }),
-  })
 
 export const queryDataset = ({ dataset, ticker, keyword, limit = 50 }) => {
   const params = new URLSearchParams({ dataset, limit })
