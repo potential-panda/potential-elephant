@@ -193,8 +193,10 @@ class CandidateMetrics:
 
     def _load_river_tree(self) -> dict[str, dict]:
         """
-        {ticker: {river_id, river_name, layer}}
+        {ticker: {river_id, river_name, layer, status, primary_river}}
         First occurrence wins when a ticker appears in multiple rivers.
+        Dormant/rejected nodes are preserved in the tree but excluded from daily
+        candidate scoring.
         """
         if not self.tree_path or not os.path.exists(self.tree_path):
             return {}
@@ -203,12 +205,17 @@ class CandidateMetrics:
         result = {}
         for river in data.get("rivers", []):
             for node in river.get("nodes", []):
+                status = node.get("status", "active")
+                if status in {"dormant", "rejected"}:
+                    continue
                 t = node["ticker"]
                 if t not in result:
                     result[t] = {
                         "river_id": river["id"],
                         "river_name": river["name"],
                         "layer": node["layer"],
+                        "status": status,
+                        "primary_river": node.get("primary_river", True),
                     }
         return result
 
