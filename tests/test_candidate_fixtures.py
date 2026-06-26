@@ -7,6 +7,8 @@ import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
 
 from elephant.candidates import CandidateMetrics
+from elephant.candidates import _safe_float
+from elephant.scoring import score_d5
 
 
 def score(**kwargs):
@@ -91,3 +93,35 @@ class TestQueueAssignment:
                         river_id="ai_infra", laggard_gap=-170.0,
                         has_tdnet=False, has_minkabu=True)
         assert s == 100, f"score must be capped at 100, got {s}"
+
+
+def test_safe_float_converts_nan_to_default():
+    assert _safe_float(float("nan")) == 0.0
+    assert _safe_float(None) == 0.0
+    assert _safe_float("12.5") == 12.5
+
+
+def test_us_yahoo_jp_bbs_presence_counts_in_d5():
+    # US activity-presence (+1, requires actual recent comments) + upper
+    # velocity tier (+2, >= 4.5 comments/hour) = 3.
+    assert score_d5(
+        [],
+        bbs_velocity_latest=9.7,
+        bbs_velocity_prev=None,
+        has_minkabu=False,
+        is_jp_ticker=False,
+        has_yahoo_jp_bbs=True,
+    ) == 3
+
+
+def test_jp_bbs_presence_requires_rank_or_velocity_change_for_d5():
+    # No rank/today signal, but velocity 9.7 still lands in the JP medium
+    # tier (>= 5.0, < 10.0 comments/hour) = 1.
+    assert score_d5(
+        [],
+        bbs_velocity_latest=9.7,
+        bbs_velocity_prev=None,
+        has_minkabu=False,
+        is_jp_ticker=True,
+        has_yahoo_jp_bbs=True,
+    ) == 1

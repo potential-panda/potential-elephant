@@ -112,6 +112,7 @@ def mark_yahoo_jp_bbs(tickers_file: str, ticker: str, has_bbs: bool) -> None:
     entry["has_yahoo_jp_bbs"] = has_bbs
     cache[ticker] = entry
     save_cache(tickers_file, cache)
+    _sync_us_ticker_entry(tickers_file, ticker, entry)
 
 
 def get_yahoo_jp_bbs_status(cache: dict, ticker: str) -> bool | None:
@@ -132,6 +133,7 @@ def mark_minkabu_us(tickers_file: str, ticker: str, has_page: bool) -> None:
     entry["has_minkabu_us"] = has_page
     cache[ticker] = entry
     save_cache(tickers_file, cache)
+    _sync_us_ticker_entry(tickers_file, ticker, entry)
 
 
 def get_minkabu_us_status(cache: dict, ticker: str) -> bool | None:
@@ -140,3 +142,61 @@ def get_minkabu_us_status(cache: dict, ticker: str) -> bool | None:
     if not isinstance(entry, dict):
         return None
     return entry.get("has_minkabu_us")
+
+
+def _us_tickers_path(tickers_file: str) -> Path:
+    return Path(tickers_file).parent / "tickers-us.txt"
+
+
+_FLAG_TO_STR = {True: "true", False: "false", None: "unknown"}
+_STR_TO_FLAG = {"true": True, "false": False, "unknown": None}
+
+
+def load_us_tickers(tickers_file: str) -> dict[str, dict]:
+    """Confirmed US tickers: {ticker: {"bbs": bool|None, "minkabu": bool|None}}.
+
+    A ticker appears here once either Yahoo JP BBS or Minkabu confirms a
+    reachable page for it. The other flag may still be `None` (not yet
+    probed) at that point. This is the explicit, human-readable companion to
+    tickers.txt (JP BBS rank order) that the daily scheduler reads to decide
+    which US tickers get full-depth scraping.
+    """
+    path = _us_tickers_path(tickers_file)
+    if not path.exists():
+        return {}
+    result = {}
+    for line in path.read_text().splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        parts = line.split()
+        ticker = parts[0]
+        flags = {"bbs": None, "minkabu": None}
+        for part in parts[1:]:
+            key, _, val = part.partition("=")
+            if key in flags:
+                flags[key] = _STR_TO_FLAG.get(val.lower())
+        result[ticker] = flags
+    return result
+
+
+def _save_us_tickers(tickers_file: str, entries: dict[str, dict]) -> None:
+    path = _us_tickers_path(tickers_file)
+    lines = [
+        f"{ticker} bbs={_FLAG_TO_STR[v.get('bbs')]} minkabu={_FLAG_TO_STR[v.get('minkabu')]}"
+        for ticker, v in sorted(entries.items())
+    ]
+    path.write_text("\n".join(lines) + ("\n" if lines else ""))
+
+
+def _sync_us_ticker_entry(tickers_file: str, ticker: str, entry: dict) -> None:
+    """Add/refresh ticker in tickers-us.txt once it has a confirmed BBS or Minkabu page."""
+    if is_jp_ticker(ticker):
+        return
+    bbs_val = entry.get("has_yahoo_jp_bbs")
+    minkabu_val = entry.get("has_minkabu_us")
+    if bbs_val is not True and minkabu_val is not True:
+        return  # neither source confirmed yet; don't register
+    entries = load_us_tickers(tickers_file)
+    entries[ticker] = {"bbs": bbs_val, "minkabu": minkabu_val}
+    _save_us_tickers(tickers_file, entries)

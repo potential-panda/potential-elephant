@@ -26,7 +26,7 @@ const TAB_COMPONENTS = {
 
 function tabFromHash() {
   const hash = window.location.hash.slice(1).split('/')[0]
-  return TAB_COMPONENTS[hash] ? hash : 'digest'
+  return TAB_COMPONENTS[hash] ? hash : 'candidates'
 }
 
 export default function App() {
@@ -43,7 +43,7 @@ export default function App() {
     setActiveTab(tab)
   }
 
-  const ActiveComponent = TAB_COMPONENTS[activeTab] || Tickers
+  const ActiveComponent = TAB_COMPONENTS[activeTab] || Candidates
 
   return (
     <Layout activeTab={activeTab} onTabChange={handleTabChange}>

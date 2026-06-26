@@ -14,6 +14,21 @@ def _normalize(ticker: str) -> tuple[str, str]:
     return full, bare
 
 
+def _sort_comments(df: pd.DataFrame) -> pd.DataFrame:
+    df = df.copy()
+    df["scraped_at"] = pd.to_datetime(df["scraped_at"], errors="coerce")
+    df["post_datetime_sort"] = pd.to_datetime(df.get("post_datetime"), errors="coerce")
+    df["post_id_sort"] = pd.to_numeric(df.get("post_id"), errors="coerce")
+    return (
+        df.sort_values(
+            ["post_datetime_sort", "post_id_sort", "scraped_at"],
+            ascending=[False, False, False],
+            na_position="last",
+        )
+        .drop(columns=["post_datetime_sort", "post_id_sort"], errors="ignore")
+    )
+
+
 def get_detail(ticker_raw: str) -> dict:
     ticker_t, bare = _normalize(ticker_raw.strip())
     result: dict = {"ticker": ticker_t, "bare": bare}
@@ -30,8 +45,7 @@ def get_detail(ticker_raw: str) -> dict:
     if files:
         try:
             df = pd.concat([pd.read_parquet(f) for f in files], ignore_index=True)
-            df["scraped_at"] = pd.to_datetime(df["scraped_at"])
-            df = df.sort_values("scraped_at", ascending=False)
+            df = _sort_comments(df)
             result["comments"] = {
                 "total": len(df),
                 "records": df.head(50).fillna("").astype(str).to_dict("records"),

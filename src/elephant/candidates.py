@@ -53,6 +53,14 @@ def _high_28d(df: pd.DataFrame) -> Optional[float]:
     return round(float(window["close"].max()), 4)
 
 
+def _safe_float(value, default: float = 0.0) -> float:
+    try:
+        result = float(value)
+    except (TypeError, ValueError):
+        return default
+    return result if math.isfinite(result) else default
+
+
 class CandidateMetrics:
     def __init__(self, data_dir: str, tickers_file: str, tree_path: Optional[str] = None):
         self.data_dir = data_dir
@@ -95,6 +103,7 @@ class CandidateMetrics:
                     "speed_prev": None,
                     "trend": None,
                     "has_yahoo_jp_bbs": bbs_status,
+                    "speed_history_recent": [],
                 }
                 continue
 
@@ -120,6 +129,7 @@ class CandidateMetrics:
                 "speed_prev": speed_prev,
                 "trend": trend,
                 "has_yahoo_jp_bbs": bbs_status,
+                "speed_history_recent": speeds,
             }
         return result
 
@@ -149,11 +159,11 @@ class CandidateMetrics:
                 if recent.empty:
                     continue
                 row = recent.iloc[-1]
-                strongest = float(row.get("strongest") or 0)
-                strong = float(row.get("strong") or 0)
-                both = float(row.get("both") or 0)
-                weak = float(row.get("weak") or 0)
-                weakest = float(row.get("weakest") or 0)
+                strongest = _safe_float(row.get("strongest"))
+                strong = _safe_float(row.get("strong"))
+                both = _safe_float(row.get("both"))
+                weak = _safe_float(row.get("weak"))
+                weakest = _safe_float(row.get("weakest"))
                 result[ticker] = {
                     "strongest": strongest,
                     "strong": strong,
@@ -614,7 +624,17 @@ class CandidateMetrics:
             # D5
             bbs_speed_latest = b.get("speed_latest")
             bbs_speed_prev = b.get("speed_prev")
-            d5 = score_d5(bbs_rank_history, bbs_speed_latest, bbs_speed_prev, has_minkabu)
+            d5 = score_d5(
+                bbs_rank_history,
+                bbs_speed_latest,
+                bbs_speed_prev,
+                has_minkabu,
+                is_jp_ticker=is_jp,
+                has_yahoo_jp_bbs=b.get("has_yahoo_jp_bbs"),
+                bbs_rank=b.get("rank"),
+                bbs_is_today=b.get("is_today", False),
+                bbs_speed_history_recent=b.get("speed_history_recent"),
+            )
 
             # D6
             d6 = score_d6(minkabu_scraped_at, d1)

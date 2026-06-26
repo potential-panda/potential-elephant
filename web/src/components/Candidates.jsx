@@ -82,15 +82,8 @@ function ScoreBreakdown({ row }) {
   )
 }
 
-function CandidateRow({ row, onDecision }) {
-  const qc = QUEUE_LABELS[row.queue] || QUEUE_LABELS.C
+function CandidateRow({ row }) {
   const [expanded, setExpanded] = useState(false)
-  const [reasonInput, setReasonInput] = useState('')
-
-  const handleDecision = (decision) => {
-    onDecision(row.ticker, decision, row, reasonInput)
-    setReasonInput('')
-  }
 
   return (
     <>
@@ -147,45 +140,17 @@ function CandidateRow({ row, onDecision }) {
             )}
 
             {/* Context */}
-            <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap', fontSize: 11, marginBottom: 8 }}>
-              {row.queue_reason && (
-                <div><span style={{ color: '#5a7080' }}>Reason: </span><span style={{ color: '#bfcfdf' }}>{row.queue_reason}</span></div>
-              )}
-              {row.price_date && (
-                <div><span style={{ color: '#5a7080' }}>Price: </span><span style={{ color: '#bfcfdf' }}>{row.price_date}</span></div>
+            <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap', fontSize: 11 }}>
+              {row.last_close != null && (
+                <div>
+                  <span style={{ color: '#5a7080' }}>Price: </span>
+                  <span style={{ color: '#bfcfdf' }}>{row.last_close}</span>
+                  {row.price_date && <span style={{ color: '#3a5060' }}> ({row.price_date})</span>}
+                </div>
               )}
               {row.speed_latest != null && (
                 <div><span style={{ color: '#5a7080' }}>BBS: </span><span style={{ color: '#bfcfdf' }}>{row.speed_latest.toFixed(1)} c/h {row.speed_trend && `(${row.speed_trend})`}</span></div>
               )}
-            </div>
-
-            {/* Decision actions */}
-            <div style={{ borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: 8 }}>
-              <input
-                value={reasonInput}
-                onChange={e => setReasonInput(e.target.value)}
-                placeholder="Reason (optional)"
-                onClick={e => e.stopPropagation()}
-                style={{ fontSize: 11, padding: '3px 8px', borderRadius: 4, border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.04)', color: '#bfcfdf', marginBottom: 6, width: 240 }}
-              />
-              <div style={{ display: 'flex', gap: 8 }}>
-                <button onClick={e => { e.stopPropagation(); handleDecision('pass') }}
-                  style={{ fontSize: 11, padding: '3px 10px', borderRadius: 4, border: '1px solid rgba(248,113,113,0.3)', color: '#f87171', background: 'rgba(248,113,113,0.06)', cursor: 'pointer' }}>
-                  Pass
-                </button>
-                <button onClick={e => { e.stopPropagation(); handleDecision('watch') }}
-                  style={{ fontSize: 11, padding: '3px 10px', borderRadius: 4, border: '1px solid rgba(245,158,11,0.3)', color: '#f59e0b', background: 'rgba(245,158,11,0.06)', cursor: 'pointer' }}>
-                  Watch
-                </button>
-                <button onClick={e => { e.stopPropagation(); handleDecision('river_candidate') }}
-                  style={{ fontSize: 11, padding: '3px 10px', borderRadius: 4, border: '1px solid rgba(0,220,150,0.3)', color: '#00dc96', background: 'rgba(0,220,150,0.06)', cursor: 'pointer' }}>
-                  River Candidate
-                </button>
-                <button onClick={e => { e.stopPropagation(); handleDecision('needs_manual_research') }}
-                  style={{ fontSize: 11, padding: '3px 10px', borderRadius: 4, border: '1px solid rgba(167,139,250,0.3)', color: '#a78bfa', background: 'rgba(167,139,250,0.06)', cursor: 'pointer' }}>
-                  Research
-                </button>
-              </div>
             </div>
           </td>
         </tr>
@@ -194,7 +159,7 @@ function CandidateRow({ row, onDecision }) {
   )
 }
 
-function QueueTable({ rows, queue, onDecision }) {
+function QueueTable({ rows, queue }) {
   const qc = QUEUE_LABELS[queue]
   if (!rows.length) return null
   return (
@@ -221,7 +186,7 @@ function QueueTable({ rows, queue, onDecision }) {
             </tr>
           </thead>
           <tbody>
-            {rows.map(row => <CandidateRow key={row.ticker} row={row} onDecision={onDecision} />)}
+            {rows.map(row => <CandidateRow key={row.ticker} row={row} />)}
           </tbody>
         </table>
       </div>
@@ -233,7 +198,6 @@ export default function Candidates() {
   const [data, setData] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
-  const [decisionMsg, setDecisionMsg] = useState(null)
   const [showSuppressed, setShowSuppressed] = useState(false)
 
   const load = (includeSuppressed = showSuppressed) => {
@@ -254,21 +218,6 @@ export default function Candidates() {
   }
 
   useEffect(() => { load() }, [])
-
-  const handleDecision = (ticker, decision, row = null, reason = '') => {
-    fetch(`${APP_BASE}/api/decisions`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ticker, decision, reason, snapshot: row || {} }),
-    })
-      .then(r => r.json())
-      .then(() => {
-        setDecisionMsg(`${ticker} → ${decision}`)
-        setTimeout(() => setDecisionMsg(null), 3000)
-        load()
-      })
-      .catch(e => setDecisionMsg(`Error: ${e}`))
-  }
 
   const toggleSuppressed = () => {
     const next = !showSuppressed
@@ -293,9 +242,6 @@ export default function Candidates() {
           style={{ fontSize: 11, padding: '4px 12px', borderRadius: 4, border: '1px solid rgba(90,112,128,0.3)', color: showSuppressed ? '#bfcfdf' : '#5a7080', background: showSuppressed ? 'rgba(90,112,128,0.1)' : 'transparent', cursor: 'pointer', fontFamily: 'monospace' }}>
           {showSuppressed ? 'Hide suppressed' : 'Show suppressed'}
         </button>
-        {decisionMsg && (
-          <span style={{ fontSize: 12, color: '#00dc96' }}>{decisionMsg}</span>
-        )}
       </div>
 
       {loading && <div style={{ color: '#5a7080', fontSize: 14 }}>Loading candidates…</div>}
@@ -307,10 +253,10 @@ export default function Candidates() {
             {data.length} tickers · {queueA.length} river · {queueB.length} monitor · {queueC.length} crowd
             {showSuppressed && ` · ${queueSuppressed.length} suppressed`}
           </div>
-          <QueueTable rows={queueA} queue="A" onDecision={handleDecision} />
-          <QueueTable rows={queueB} queue="B" onDecision={handleDecision} />
-          <QueueTable rows={queueC} queue="C" onDecision={handleDecision} />
-          {showSuppressed && <QueueTable rows={queueSuppressed} queue="suppressed" onDecision={handleDecision} />}
+          <QueueTable rows={queueA} queue="A" />
+          <QueueTable rows={queueB} queue="B" />
+          <QueueTable rows={queueC} queue="C" />
+          {showSuppressed && <QueueTable rows={queueSuppressed} queue="suppressed" />}
         </>
       )}
     </div>

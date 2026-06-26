@@ -14,18 +14,29 @@ class MinkabuPlanner(Planner):
         self.tree_path = tree_path
 
     def create(self) -> List[HarvesterTask]:
-        from elephant.ticker_registry import is_jp_ticker, load_cache, get_minkabu_us_status
+        from elephant.ticker_registry import is_jp_ticker, load_cache, get_minkabu_us_status, load_us_tickers
         all_tickers = get_tickers(self.tickers_file, tree_path=self.tree_path)
+
+        # tickers.txt (JP) and tickers-us.txt (confirmed US) together define
+        # the daily scraping plan. Cache fallback covers confirmed-no
+        # tickers that never got registered in tickers-us.txt.
+        us_status = load_us_tickers(self.tickers_file)
         cache = load_cache(self.tickers_file)
 
         # JP tickers: always include (sourced from BBS ranking file)
         jp_tickers = [t for t in all_tickers if is_jp_ticker(t)]
 
         # US tickers: include only if not yet probed OR confirmed to have a page
+        def minkabu_status(t):
+            status = us_status.get(t, {}).get("minkabu")
+            if status is None:
+                status = get_minkabu_us_status(cache, t)
+            return status
+
         us_tickers = [
             t for t in all_tickers
             if not is_jp_ticker(t)
-            and get_minkabu_us_status(cache, t) is not False
+            and minkabu_status(t) is not False
         ]
 
         if not jp_tickers and not us_tickers:

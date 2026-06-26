@@ -43,6 +43,29 @@ deliverables, ask an implementation agent to apply the approved change set to:
 /panda-infra/elephant/river_tree.json
 ```
 
+## D5 Attention-Change Scoring
+
+Use AgentOp's `explorer-critic` scenario to redesign `score_d5` (BBS
+velocity/acceleration handling and JP-vs-US attention asymmetry):
+
+```bash
+agentop dialogue start \
+  --agent-a codex \
+  --agent-b codex \
+  --brief /home/lulurun/workspace/potential-elephant/doc/dialogues/d5-attention-change-scoring.md \
+  --scenario /home/lulurun/workspace/agentop/src/agentop/dialogue/scenarios/explorer-critic.toml
+```
+
+This dialogue is decision-only. The deliverables go in:
+
+```text
+deliverables/d5-scoring-decision.md
+deliverables/d5-change-set.md
+```
+
+After review, ask an implementation agent to apply the approved change set
+to `src/elephant/scoring.py` and `src/elephant/scoring_config.py`.
+
 ## Optional Variants
 
 Use different agents if useful:

@@ -46,13 +46,35 @@ MAJOR_DISCLOSURE_KEYWORDS = [
 ]
 
 # D5 attention_change_score
-D5_BBS_RANK_IMPROVE_PTS = 4   # 3 consecutive improving days
-D5_BBS_RANK_IMPROVE_DAYS = 3
-D5_BBS_VELOCITY_PTS = 2       # >20% wow velocity increase
-D5_BBS_VELOCITY_THRESHOLD = 0.20
+# JP: current-rank presence (top 30, seen today)
+D5_JP_BBS_TOP_RANK_PTS = 2
+D5_JP_BBS_TOP_RANK_THRESHOLD = 30
+
+# Current velocity level, tiered per market (US BBS volume is structurally lower)
+D5_JP_BBS_VELOCITY_MED_PTS = 1
+D5_JP_BBS_VELOCITY_MED_THRESHOLD = 5.0    # comments/hour
+D5_JP_BBS_VELOCITY_HIGH_PTS = 2
+D5_JP_BBS_VELOCITY_HIGH_THRESHOLD = 10.0  # comments/hour
+D5_US_BBS_VELOCITY_MED_PTS = 1
+D5_US_BBS_VELOCITY_ACTIVE_THRESHOLD = 1.0   # comments/hour
+D5_US_BBS_VELOCITY_HIGH_PTS = 2
+D5_US_BBS_VELOCITY_UPPER_THRESHOLD = 4.5    # comments/hour
+
+# One-step latest-vs-prev velocity change (week over week)
+D5_BBS_WOW_CHANGE_PTS = 1
+D5_BBS_WOW_CHANGE_THRESHOLD = 0.30
+
+# Multi-point acceleration: two consecutive >=10% increases, distinct from the one-step change above
+D5_BBS_ACCEL_PTS = 1
+D5_BBS_ACCEL_RATIO_THRESHOLD = 1.10
+
+# US activity-presence: requires an actual recent comment, not just page existence
+D5_US_BBS_ACTIVITY_PRESENCE_PTS = 1
+D5_US_BBS_ACTIVITY_PRESENCE_THRESHOLD = 0.10  # comments/hour
+
 D5_MINKABU_NEW_PTS = 3
 D5_ANALYST_NEW_PTS = 3        # not yet implementable in v1; scored as 0
-D5_BBS_CAP = 6                # BBS rank+velocity combined cap
+D5_BBS_CAP = 6                # BBS-derived points cap, shared across markets
 D5_MAX = 10
 
 # D6 coverage_gap_score (v1: freshness proxy)

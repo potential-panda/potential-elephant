@@ -203,7 +203,7 @@ class YahooFinanceHarvester(Harvester):
             results = {}
             if evaluation_data:
                 results["yahoo_evaluations"] = HarvesterResult(
-                    tags={"ticker": self.ticker, "date": scraped_at.strftime("%Y")}, data=[evaluation_data]
+                    tags={"ticker": self.ticker, "YEAR": scraped_at.strftime("%Y")}, data=[evaluation_data]
                 )
             if all_comments:
                 results["yahoo_comments"] = HarvesterResult(

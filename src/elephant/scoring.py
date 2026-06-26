@@ -21,8 +21,15 @@ from elephant.scoring_config import (
     D4_MAX, D4_FRESHNESS_DAYS, D4_RAW_TDNET_MAJOR, D4_RAW_TDNET_MINOR,
     D4_RAW_POLICY_SECTOR, D4_RAW_THIRD_PARTY_REPORTING, D4_RAW_IR_PIVOT,
     SOURCE_TIER_MULTIPLIERS, MAJOR_DISCLOSURE_KEYWORDS,
-    D5_BBS_RANK_IMPROVE_PTS, D5_BBS_RANK_IMPROVE_DAYS, D5_BBS_VELOCITY_PTS,
-    D5_BBS_VELOCITY_THRESHOLD, D5_MINKABU_NEW_PTS, D5_BBS_CAP, D5_MAX,
+    D5_JP_BBS_TOP_RANK_PTS, D5_JP_BBS_TOP_RANK_THRESHOLD,
+    D5_JP_BBS_VELOCITY_MED_PTS, D5_JP_BBS_VELOCITY_MED_THRESHOLD,
+    D5_JP_BBS_VELOCITY_HIGH_PTS, D5_JP_BBS_VELOCITY_HIGH_THRESHOLD,
+    D5_US_BBS_VELOCITY_MED_PTS, D5_US_BBS_VELOCITY_ACTIVE_THRESHOLD,
+    D5_US_BBS_VELOCITY_HIGH_PTS, D5_US_BBS_VELOCITY_UPPER_THRESHOLD,
+    D5_BBS_WOW_CHANGE_PTS, D5_BBS_WOW_CHANGE_THRESHOLD,
+    D5_BBS_ACCEL_PTS, D5_BBS_ACCEL_RATIO_THRESHOLD,
+    D5_US_BBS_ACTIVITY_PRESENCE_PTS, D5_US_BBS_ACTIVITY_PRESENCE_THRESHOLD,
+    D5_MINKABU_NEW_PTS, D5_BBS_CAP, D5_MAX,
     D6_NO_COVERAGE_PTS, D6_STALE_COVERAGE_PTS, D6_SPARSE_COVERAGE_PTS,
     D6_STALE_THRESHOLD_DAYS, D6_ACTIVE_THRESHOLD_DAYS,
     NOISE_PENALTY_BBS_TOP10_FALLING, NOISE_PENALTY_BBS_TOP20_NO_CATALYST,
@@ -158,24 +165,60 @@ def score_d5(
     bbs_velocity_prev: Optional[float],
     has_minkabu: bool,
     minkabu_is_new: bool = False,
+    *,
+    is_jp_ticker: bool = True,
+    has_yahoo_jp_bbs: Optional[bool] = None,
+    bbs_rank: Optional[int] = None,
+    bbs_is_today: bool = False,
+    bbs_speed_history_recent: Optional[list[float]] = None,
 ) -> int:
-    """Attention change score (0-10, additive, BBS rank+velocity capped at 6)."""
+    """Attention change score (0-10, additive, BBS points capped at 6).
+
+    `bbs_rank_history` is unused — the v1 rank-improvement signal required
+    rank history that the harvester does not populate. Kept as a parameter
+    for call-site compatibility.
+    """
     bbs_pts = 0
+    speeds = bbs_speed_history_recent or []
 
-    # +4 if BBS rank improves 3 consecutive observed days
-    # rank_history is newest-first list of {"date": ..., "rank": int}
-    ranks = [h.get("rank") for h in bbs_rank_history[:D5_BBS_RANK_IMPROVE_DAYS] if h.get("rank") is not None]
-    if len(ranks) >= D5_BBS_RANK_IMPROVE_DAYS:
-        # Lower rank number = better position. Consecutive improvement: ranks[0] < ranks[1] < ranks[2]
-        if ranks[0] < ranks[1] < ranks[2]:
-            bbs_pts += D5_BBS_RANK_IMPROVE_PTS
+    # Presence/rank signal. JP attention is read off today's BBS rank; Yahoo
+    # JP BBS structurally under-covers US tickers, so a US ticker instead
+    # needs an actual recent comment, not just a page, to earn this point.
+    if is_jp_ticker:
+        if bbs_rank is not None and bbs_is_today and bbs_rank <= D5_JP_BBS_TOP_RANK_THRESHOLD:
+            bbs_pts += D5_JP_BBS_TOP_RANK_PTS
+    else:
+        if (has_yahoo_jp_bbs is True and bbs_velocity_latest is not None
+                and bbs_velocity_latest >= D5_US_BBS_ACTIVITY_PRESENCE_THRESHOLD):
+            bbs_pts += D5_US_BBS_ACTIVITY_PRESENCE_PTS
 
-    # +2 if BBS comment velocity up >20% wow
+    # Current velocity level, tiered separately per market since observed US
+    # comment volume is structurally lower than JP.
+    if bbs_velocity_latest is not None:
+        if is_jp_ticker:
+            if bbs_velocity_latest >= D5_JP_BBS_VELOCITY_HIGH_THRESHOLD:
+                bbs_pts += D5_JP_BBS_VELOCITY_HIGH_PTS
+            elif bbs_velocity_latest >= D5_JP_BBS_VELOCITY_MED_THRESHOLD:
+                bbs_pts += D5_JP_BBS_VELOCITY_MED_PTS
+        else:
+            if bbs_velocity_latest >= D5_US_BBS_VELOCITY_UPPER_THRESHOLD:
+                bbs_pts += D5_US_BBS_VELOCITY_HIGH_PTS
+            elif bbs_velocity_latest >= D5_US_BBS_VELOCITY_ACTIVE_THRESHOLD:
+                bbs_pts += D5_US_BBS_VELOCITY_MED_PTS
+
+    # One-step latest-vs-prev velocity change (week over week).
     if (bbs_velocity_latest is not None and bbs_velocity_prev is not None
             and bbs_velocity_prev > 0):
         wow_change = (bbs_velocity_latest - bbs_velocity_prev) / bbs_velocity_prev
-        if wow_change > D5_BBS_VELOCITY_THRESHOLD:
-            bbs_pts += D5_BBS_VELOCITY_PTS
+        if wow_change >= D5_BBS_WOW_CHANGE_THRESHOLD:
+            bbs_pts += D5_BBS_WOW_CHANGE_PTS
+
+    # Multi-point acceleration: change-of-velocity distinct from the one-step
+    # check above — two consecutive increases, not just one comparison.
+    if len(speeds) >= 3 and speeds[1] > 0 and speeds[2] > 0:
+        if (speeds[0] / speeds[1] >= D5_BBS_ACCEL_RATIO_THRESHOLD
+                and speeds[1] / speeds[2] >= D5_BBS_ACCEL_RATIO_THRESHOLD):
+            bbs_pts += D5_BBS_ACCEL_PTS
 
     bbs_pts = min(bbs_pts, D5_BBS_CAP)
 

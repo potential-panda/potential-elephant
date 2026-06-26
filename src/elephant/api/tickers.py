@@ -3,12 +3,13 @@ from datetime import datetime
 
 import pandas as pd
 
-from elephant.config import DATA_DIR, TICKERS_FILE
-from elephant.ticker_registry import load_cache
+from elephant.config import DATA_DIR, TICKERS_FILE, TICKERS_US_FILE
+from elephant.ticker_registry import is_jp_ticker, load_cache, load_us_tickers
 
 
 def get_tickers() -> list[dict]:
     cache = load_cache(TICKERS_FILE)
+    us_status = load_us_tickers(TICKERS_FILE)
 
     # BBS rank order from tickers.txt
     rank_map = {}
@@ -40,24 +41,36 @@ def get_tickers() -> list[dict]:
             except Exception:
                 pass
 
-    result = []
-    all_tickers = set(rank_map) | set(cache)
-    for ticker in all_tickers:
+    # JP tickers come only from tickers.txt (rank file). US tickers come only
+    # from tickers-us.txt plus any not-yet-confirmed US ticker already seen in
+    # the cache (e.g. mid-probe) — never the other way around.
+    jp_tickers = set(rank_map)
+    us_tickers = {t for t in (set(cache) | set(us_status)) if not is_jp_ticker(t)}
+
+    def build_row(ticker: str) -> dict:
         entry = cache.get(ticker) or {}
         if isinstance(entry, str):
             entry = {"last_seen": entry, "speed_history": []}
-        result.append({
+        us_entry = us_status.get(ticker)
+        return {
             "ticker": ticker,
             "bbs_rank": rank_map.get(ticker),
             "last_seen": entry.get("last_seen"),
             "last_scraped_at": entry.get("last_scraped_at"),
             "speed_history": entry.get("speed_history", []),
             "datasets": avail.get(ticker, {}),
-        })
+            "in_tickers_us_file": ticker in us_status,
+            "us_bbs": us_entry.get("bbs") if us_entry else None,
+            "us_minkabu": us_entry.get("minkabu") if us_entry else None,
+        }
 
-    result.sort(key=lambda x: (x["bbs_rank"] or 9999))
+    jp_items = sorted((build_row(t) for t in jp_tickers), key=lambda x: x["bbs_rank"] or 9999)
+    us_items = sorted((build_row(t) for t in us_tickers), key=lambda x: x["ticker"])
+
     return {
-        "items": result,
+        "jp_items": jp_items,
+        "us_items": us_items,
         "tickers_file": TICKERS_FILE,
         "cache_file": TICKERS_FILE.replace("tickers.txt", "tickers.cache.json"),
+        "tickers_us_file": TICKERS_US_FILE,
     }

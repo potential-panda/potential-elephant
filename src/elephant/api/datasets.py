@@ -85,5 +85,10 @@ def query_dataset(dataset: str, ticker: str = None, keyword: str = None, limit: 
     if not files:
         return []
     dfs = [pd.read_parquet(f) for f in files]
-    df = pd.concat(dfs, ignore_index=True).sort_values("scraped_at", ascending=False)
+    df = pd.concat(dfs, ignore_index=True)
+    if dataset == "yahoo_comments":
+        from elephant.api.detail import _sort_comments
+        df = _sort_comments(df)
+    else:
+        df = df.sort_values("scraped_at", ascending=False)
     return df.head(limit).fillna("").astype(str).to_dict("records")

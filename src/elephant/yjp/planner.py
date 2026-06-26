@@ -14,22 +14,39 @@ class YahooFinancePlanner(Planner):
         self.tree_path = tree_path
 
     def create(self) -> List[HarvesterTask]:
-        from elephant.ticker_registry import is_jp_ticker, load_cache, get_yahoo_jp_bbs_status
+        from elephant.ticker_registry import is_jp_ticker, load_cache, get_yahoo_jp_bbs_status, load_us_tickers
         all_tickers = get_tickers(self.tickers_file, tree_path=self.tree_path)
 
+        # tickers.txt (JP) and tickers-us.txt (confirmed US) together define
+        # the daily scraping plan. tickers-us.txt is authoritative when a
+        # ticker is listed there (an operator can also hand-edit it). The
+        # cache is consulted only as a fallback for confirmed-no tickers
+        # that never got registered in tickers-us.txt (neither source ever
+        # confirmed a page for them).
+        us_status = load_us_tickers(self.tickers_file)
         cache = load_cache(self.tickers_file)
 
         # JP tickers: always include (sourced from BBS ranking)
         jp_tickers = [t for t in all_tickers if is_jp_ticker(t)]
 
-        # US tickers: include only if not yet probed OR confirmed to have a BBS page
-        us_tickers = [
-            t for t in all_tickers
-            if not is_jp_ticker(t)
-            and get_yahoo_jp_bbs_status(cache, t) is not False
-        ]
+        # US tickers: tree names are probed for Yahoo JP BBS availability.
+        # Once confirmed in tickers-us.txt, scrape them with the same depth
+        # as JP tickers. Confirmed-no (bbs=False) tickers are skipped.
+        us_confirmed_tickers = []
+        us_probe_tickers = []
+        for ticker in all_tickers:
+            if is_jp_ticker(ticker):
+                continue
+            bbs_status = us_status.get(ticker, {}).get("bbs")
+            if bbs_status is None:
+                bbs_status = get_yahoo_jp_bbs_status(cache, ticker)
+            if bbs_status is True:
+                us_confirmed_tickers.append(ticker)
+            elif bbs_status is None:
+                us_probe_tickers.append(ticker)
 
-        if not jp_tickers and not us_tickers:
+        full_tickers = jp_tickers + us_confirmed_tickers
+        if not full_tickers and not us_probe_tickers:
             return []
 
         tasks = []
@@ -42,8 +59,8 @@ class YahooFinancePlanner(Planner):
 
         today = datetime.now()
 
-        # JP tickers: full scrape (max 10 pages, 200 comments)
-        for i, ticker in enumerate(jp_tickers):
+        # JP tickers and confirmed US Yahoo JP BBS tickers: full scrape.
+        for i, ticker in enumerate(full_tickers):
             random_min = available_minutes[i % len(available_minutes)]
             scheduled_at = today.replace(hour=random_min // 60, minute=random_min % 60, second=0, microsecond=0)
             harvester = YahooFinanceHarvester(self.store, ticker, tickers_file=self.tickers_file)
@@ -53,9 +70,9 @@ class YahooFinancePlanner(Planner):
                 args={"max_pages": 10, "max_comments": 200},
             ))
 
-        # US tickers: lighter scrape (max 3 pages, 50 comments) — probe + collect
-        us_start = len(jp_tickers)
-        for i, ticker in enumerate(us_tickers):
+        # Unprobed US tree tickers: lighter scrape to discover BBS availability.
+        us_start = len(full_tickers)
+        for i, ticker in enumerate(us_probe_tickers):
             random_min = available_minutes[(us_start + i) % len(available_minutes)]
             scheduled_at = today.replace(hour=random_min // 60, minute=random_min % 60, second=0, microsecond=0)
             harvester = YahooFinanceHarvester(self.store, ticker, tickers_file=self.tickers_file)
