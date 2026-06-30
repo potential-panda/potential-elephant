@@ -14,6 +14,29 @@ class YahooFinancePlanner(Planner):
         self.tree_path = tree_path
 
     def create(self) -> List[HarvesterTask]:
+        from elephant.config import SOURCE_REGISTRY_FILE
+        from elephant.source_registry import SourceRegistry
+
+        registry_rows = SourceRegistry(SOURCE_REGISTRY_FILE).available_sources("yahoo_jp_bbs")
+        if registry_rows:
+            tasks = []
+            start_min = 617
+            end_min = 1423
+            available_minutes = list(range(start_min, end_min + 1))
+            random.shuffle(available_minutes)
+            today = datetime.now()
+            for i, (ticker, _source_id, source) in enumerate(registry_rows):
+                random_min = available_minutes[i % len(available_minutes)]
+                scheduled_at = today.replace(hour=random_min // 60, minute=random_min % 60, second=0, microsecond=0)
+                harvester = YahooFinanceHarvester(self.store, ticker, tickers_file=self.tickers_file)
+                tasks.append(HarvesterTask(
+                    harvester=harvester,
+                    scheduled_at=scheduled_at,
+                    args={"source_url": source["urls"][0], "max_pages": 10, "max_comments": 200},
+                ))
+            random.shuffle(tasks)
+            return tasks
+
         from elephant.ticker_registry import is_jp_ticker, load_cache, get_yahoo_jp_bbs_status, load_us_tickers
         all_tickers = get_tickers(self.tickers_file, tree_path=self.tree_path)
 

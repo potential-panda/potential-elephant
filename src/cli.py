@@ -9,7 +9,7 @@ import pandas as pd
 from qate.util.dt_range import DtRange
 
 import elephant.secrets as _secrets
-from elephant.config import DATA_DIR, TICKERS_FILE, TREE_PATH
+from elephant.config import DATA_DIR, SOURCE_REGISTRY_FILE, TICKERS_FILE, TREE_PATH
 from elephant.framework import HarvesterTask, Planner, Scheduler, Store
 from elephant.minkabu.harvester import MinkabuHarvester
 from elephant.minkabu.planner import MinkabuPlanner
@@ -18,6 +18,7 @@ from elephant.news.planner import NewsPlanner
 from elephant.river.discoverer import Discoverer
 from elephant.river.seed import SEED_NODES
 from elephant.river.tree import FRAMEWORK_RIVERS, RiverTree
+from elephant.source_check import SourceAvailabilityHarvester, SourceAvailabilityPlanner
 from elephant.tickers import get_tickers
 from elephant.yjp.harvester import YahooFinanceHarvester
 from elephant.yjp.planner import YahooFinancePlanner
@@ -126,6 +127,8 @@ def query_cmd(args):
             mask = df["title"].str.contains(args.keyword, case=False, na=False)
             if "summary" in df.columns:
                 mask |= df["summary"].fillna("").str.contains(args.keyword, case=False, na=False)
+            if "ticker" in df.columns:
+                mask |= df["ticker"].fillna("").str.contains(args.keyword, case=False, na=False)
             df = df[mask]
             print(f"\n--- News matching '{args.keyword}' ---")
         else:
@@ -582,6 +585,59 @@ def decision_cmd(args):
 # --- schedule ---
 
 
+def sources_cmd(args):
+    from elephant.source_adapters import ADAPTERS, check_sources
+    from elephant.source_registry import SourceRegistry
+    from elephant.ticker_registry import normalize_ticker
+
+    registry = SourceRegistry(SOURCE_REGISTRY_FILE)
+
+    if args.sources_cmd == "check":
+        if args.all:
+            tickers = get_tickers(TICKERS_FILE, tree_path=TREE_PATH)
+        elif args.ticker:
+            tickers = [normalize_ticker(args.ticker)]
+        else:
+            print("Use --ticker or --all.")
+            return
+
+        source_id = args.source
+        if source_id and source_id not in ADAPTERS:
+            print(f"Unknown source: {source_id}")
+            print("Known sources: " + ", ".join(sorted(ADAPTERS)))
+            return
+
+        results = asyncio.run(check_sources(tickers, source_id=source_id))
+        for availability in results:
+            registry.upsert_availability(availability)
+            urls = ", ".join(availability.urls) if availability.urls else "-"
+            print(f"{availability.ticker:<10} {availability.source_id:<18} {availability.status:<11} {urls}")
+        registry.save()
+        print(f"Updated {SOURCE_REGISTRY_FILE}")
+        return
+
+    if args.sources_cmd == "show":
+        if args.ticker:
+            ticker = normalize_ticker(args.ticker)
+            record = registry.get_ticker(ticker)
+            print(f"{ticker} ({record.get('market', '')})")
+            for source_id, source in sorted(record.get("sources", {}).items()):
+                urls = ", ".join(source.get("urls") or []) or "-"
+                print(f"  {source_id:<18} {source.get('status','unknown'):<11} {urls}")
+            return
+
+        for ticker in registry.tickers():
+            record = registry.get_ticker(ticker)
+            available = [
+                sid for sid, source in record.get("sources", {}).items()
+                if source.get("status") == "available"
+            ]
+            print(f"{ticker:<10} {record.get('market',''):<3} {', '.join(sorted(available)) or '-'}")
+        return
+
+    print("Use: check, show")
+
+
 def schedule_cmd(args):
     store = Store(DATA_DIR)
 
@@ -591,8 +647,17 @@ def schedule_cmd(args):
     news_planner = NewsPlanner(store)
     tdnet_planner = TDnetPlanner(store)
     price_planner = PricePlanner(store, TICKERS_FILE, tree_path=TREE_PATH)
+    source_availability_planner = SourceAvailabilityPlanner(store, TICKERS_FILE, tree_path=TREE_PATH)
 
-    multi_planner = MultiPlanner([bbs_rank_planner, yjp_planner, minkabu_planner, news_planner, tdnet_planner, price_planner])
+    multi_planner = MultiPlanner([
+        bbs_rank_planner,
+        yjp_planner,
+        minkabu_planner,
+        news_planner,
+        tdnet_planner,
+        price_planner,
+        source_availability_planner,
+    ])
     scheduler = Scheduler(multi_planner)
 
     if args.dry_run:
@@ -605,9 +670,11 @@ def schedule_cmd(args):
             elif isinstance(task.harvester, MinkabuHarvester):
                 label = f"{task.harvester.ticker} (Minkabu)"
             elif isinstance(task.harvester, NewsHarvester):
-                label = "News Headlines (RSS)"
+                label = "Known-Ticker News"
             elif isinstance(task.harvester, TDnetHarvester):
                 label = "TDnet Disclosures"
+            elif isinstance(task.harvester, SourceAvailabilityHarvester):
+                label = "Source Availability Check"
             else:
                 label = "BBS Rank Update"
             print(f"{task.scheduled_at.strftime('%H:%M')} - {label}")
@@ -651,6 +718,17 @@ def main():
     # schedule
     schedule_parser = subparsers.add_parser("schedule", help="Run or dry-run the daily scraping scheduler")
     schedule_parser.add_argument("--dry-run", action="store_true")
+
+    sources_parser = subparsers.add_parser("sources", help="Check and inspect ticker source availability")
+    sources_subs = sources_parser.add_subparsers(dest="sources_cmd")
+
+    sources_check = sources_subs.add_parser("check", help="Check source availability for known tickers")
+    sources_check.add_argument("--ticker", help="Canonical ticker to check")
+    sources_check.add_argument("--all", action="store_true", help="Check all known tickers")
+    sources_check.add_argument("--source", choices=["fool_quote_news", "minkabu", "yahoo_jp_bbs"], help="Limit to one source")
+
+    sources_show = sources_subs.add_parser("show", help="Show source registry")
+    sources_show.add_argument("--ticker", help="Canonical ticker to show")
 
     # tree
     tree_parser = subparsers.add_parser("tree", help="Manage the river tree knowledge database")
@@ -736,6 +814,8 @@ def main():
         digest_cmd(args)
     elif args.command == "schedule":
         schedule_cmd(args)
+    elif args.command == "sources":
+        sources_cmd(args)
     elif args.command == "tree":
         tree_cmd(args)
     elif args.command == "discover":

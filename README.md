@@ -185,11 +185,23 @@ python src/api.py
 
 ```bash
 python src/cli.py fetch --dataset yjp_bbs_rank       # BBS hot tickers → tickers.txt
-python src/cli.py fetch --dataset news_headlines      # RSS: NHK, Reuters, Google News
+python src/cli.py fetch --dataset news_headlines      # Known-ticker news sources (general RSS disabled)
 python src/cli.py fetch --dataset yahoo_evaluations   # BBS bull/bear sentiment
 python src/cli.py fetch --dataset minkabu_raw_html    # Minkabu analyst pages
 python src/cli.py schedule                            # run the daily scheduler
 python src/cli.py schedule --dry-run                  # preview task plan
+```
+
+### Source Availability
+
+Known ticker sources are tracked in `source_registry.json`. Availability checks
+resolve exact source URLs, including source-specific ticker formats such as
+`7203.T` vs `7203`.
+
+```bash
+python src/cli.py sources check --ticker SMCI --source fool_quote_news
+python src/cli.py sources check --all
+python src/cli.py sources show --ticker SMCI
 ```
 
 ### River Tree

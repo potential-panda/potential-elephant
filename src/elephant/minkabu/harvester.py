@@ -27,6 +27,8 @@ class MinkabuHarvester(Harvester):
         self.minkabu_base = "https://minkabu.jp" if self.is_jp else "https://us.minkabu.jp"
 
     def get_url(self, params: dict) -> str:
+        if params.get("source_url"):
+            return params["source_url"]
         return f"{self.minkabu_base}/stock/{self.minkabu_ticker}"
 
     def _clean_html(self, html: str) -> str:
@@ -83,8 +85,9 @@ class MinkabuHarvester(Harvester):
             }
 
             found_any = False
+            base_url = params.get("source_url") or url
             for sub in sub_pages:
-                target_url = f"{self.minkabu_base}/stock/{self.minkabu_ticker}/{sub}"
+                target_url = f"{base_url.rstrip('/')}/{sub}"
                 content = await self._get_page_content(page, target_url)
                 data_record[sub] = content if content else ""
                 if content:

@@ -112,6 +112,8 @@ def get_detail(ticker_raw: str) -> dict:
             mask = combined["title"].str.contains(bare, case=False, na=False)
             if "summary" in combined.columns:
                 mask |= combined["summary"].fillna("").str.contains(bare, case=False, na=False)
+            if "ticker" in combined.columns:
+                mask |= combined["ticker"].fillna("").str.upper().eq(bare.upper())
             matched = (
                 combined[mask]
                 .sort_values("published_dt", ascending=False)

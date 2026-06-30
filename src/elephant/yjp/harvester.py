@@ -58,6 +58,8 @@ class YahooFinanceHarvester(Harvester):
         return 0
 
     def get_url(self, params: dict) -> str:
+        if params.get("source_url"):
+            return params["source_url"]
         return f"https://finance.yahoo.co.jp/quote/{self.ticker}/forum"
 
     async def _get_page_content(self, page, url: str) -> bool:
