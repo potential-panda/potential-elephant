@@ -586,8 +586,8 @@ def decision_cmd(args):
 
 
 def sources_cmd(args):
-    from elephant.source_adapters import ADAPTERS, check_sources
-    from elephant.source_registry import SourceRegistry
+    from elephant.source_adapters import ADAPTERS, get_adapters
+    from elephant.source_registry import SourceRegistry, market_for_ticker
     from elephant.ticker_registry import normalize_ticker
 
     registry = SourceRegistry(SOURCE_REGISTRY_FILE)
@@ -607,13 +607,28 @@ def sources_cmd(args):
             print("Known sources: " + ", ".join(sorted(ADAPTERS)))
             return
 
-        results = asyncio.run(check_sources(tickers, source_id=source_id))
-        for availability in results:
-            registry.upsert_availability(availability)
-            urls = ", ".join(availability.urls) if availability.urls else "-"
-            print(f"{availability.ticker:<10} {availability.source_id:<18} {availability.status:<11} {urls}")
-        registry.save()
+        async def run_checks():
+            count = 0
+            for ticker in tickers:
+                canonical = normalize_ticker(ticker)
+                for adapter in get_adapters(source_id):
+                    if market_for_ticker(canonical) not in adapter.supports_markets:
+                        continue
+                    availability = await adapter.check_availability(canonical)
+                    registry.upsert_availability(availability)
+                    registry.save()
+                    count += 1
+                    urls = ", ".join(availability.urls) if availability.urls else "-"
+                    print(
+                        f"{availability.ticker:<10} {availability.source_id:<18} "
+                        f"{availability.status:<11} {urls}",
+                        flush=True,
+                    )
+            return count
+
+        count = asyncio.run(run_checks())
         print(f"Updated {SOURCE_REGISTRY_FILE}")
+        print(f"Checked {count} ticker-source pairs")
         return
 
     if args.sources_cmd == "show":

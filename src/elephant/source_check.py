@@ -3,8 +3,8 @@ from typing import List
 
 from elephant.config import SOURCE_REGISTRY_FILE, TICKERS_FILE, TREE_PATH
 from elephant.framework import Harvester, HarvesterResult, HarvesterTask, Planner, Store
-from elephant.source_adapters import check_sources
-from elephant.source_registry import SourceRegistry
+from elephant.source_adapters import get_adapters
+from elephant.source_registry import SourceRegistry, market_for_ticker
 from elephant.tickers import get_tickers
 
 
@@ -22,10 +22,13 @@ class SourceAvailabilityHarvester(Harvester):
         tickers = params.get("tickers") or get_tickers(self.tickers_file, tree_path=self.tree_path)
         source_id = params.get("source") or self.source_id
         registry = SourceRegistry(SOURCE_REGISTRY_FILE)
-        results = await check_sources(tickers, source_id=source_id)
-        for availability in results:
-            registry.upsert_availability(availability)
-        registry.save()
+        for ticker in tickers:
+            for adapter in get_adapters(source_id):
+                if market_for_ticker(ticker) not in adapter.supports_markets:
+                    continue
+                availability = await adapter.check_availability(ticker)
+                registry.upsert_availability(availability)
+                registry.save()
         return {}
 
 
