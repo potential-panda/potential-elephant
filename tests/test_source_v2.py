@@ -9,6 +9,7 @@ from elephant.source.catalog import get_source, list_sources
 from elephant.source.harvest import SourceHarvestTask, tasks_for_ticker
 from elephant.source.registry import SourceAvailability, SourceRegistry
 from elephant.source.scheduler import create_daily_plan
+from elephant.source.scheduler_service import SourceSchedulerService
 
 
 def test_source_catalog_defines_market_and_ticker_sources():
@@ -65,3 +66,12 @@ def test_daily_plan_includes_market_sources_and_registry_ticker_sources(tmp_path
     assert any(t.source_id == "tdnet_disclosures" and t.scope == "market" and t.scheduled_at.strftime("%H:%M") == "19:00" for t in plan)
     assert any(t.source_id == "minkabu" and t.ticker == "7203.T" and t.url == "https://minkabu.jp/stock/7203" for t in plan)
 
+
+def test_source_scheduler_service_lifecycle():
+    service = SourceSchedulerService(max_workers=1)
+
+    assert service.start() is True
+    assert service.start() is False
+    assert service.status()["running"] is True
+    assert service.replan() >= 1
+    assert service.stop() is True

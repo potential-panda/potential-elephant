@@ -20,6 +20,8 @@ from elephant.source.run_log import recent_runs
 from elephant.source.scheduler import create_daily_plan
 from elephant.source.tickers import known_tickers
 from elephant.ticker_registry import normalize_ticker
+from elephant.analysis.catalog import list_data
+from elephant.analysis.pipeline import analyze_ticker, save_analysis
 
 
 def sources_list_cmd(args):
@@ -170,12 +172,35 @@ def sources_runs_cmd(args):
         )
 
 
+def analysis_catalog_cmd(args):
+    for item in list_data(kind=args.kind):
+        print(
+            f"{item.data_id:<28} {item.kind:<9} {item.dataset:<28} "
+            f"weight={item.weight:<4} llm={item.requires_llm}"
+        )
+
+
+def analysis_run_cmd(args):
+    packet, aggregate = analyze_ticker(args.ticker)
+    if args.save:
+        save_analysis(packet, aggregate)
+    print(f"{aggregate.ticker} score={aggregate.score} direction={aggregate.direction} confidence={aggregate.confidence}")
+    for signal in packet.signals:
+        print(
+            f"  {signal.data_id:<28} {signal.direction:<12} "
+            f"score={signal.score:<4} conf={signal.confidence:<4} {signal.reason}"
+        )
+
+
 def main():
     parser = argparse.ArgumentParser(description="Potential Elephant v2 CLI")
     subparsers = parser.add_subparsers(dest="command")
 
     sources = subparsers.add_parser("sources", help="Source component commands")
     source_subs = sources.add_subparsers(dest="sources_cmd")
+
+    analysis = subparsers.add_parser("analysis", help="Analysis component commands")
+    analysis_subs = analysis.add_subparsers(dest="analysis_cmd")
 
     list_parser = source_subs.add_parser("list", help="List source catalog")
     list_parser.add_argument("--scope", choices=["market", "ticker"])
@@ -203,6 +228,13 @@ def main():
     runs_parser = source_subs.add_parser("runs", help="Show recent source runs")
     runs_parser.add_argument("--limit", type=int, default=50)
 
+    analysis_catalog = analysis_subs.add_parser("catalog", help="List analysis data catalog")
+    analysis_catalog.add_argument("--kind", choices=["numbered", "narrative"])
+
+    analysis_run = analysis_subs.add_parser("run", help="Analyze one ticker")
+    analysis_run.add_argument("--ticker", required=True)
+    analysis_run.add_argument("--save", action="store_true", help="Save analysis signal/score datasets")
+
     args = parser.parse_args()
     if args.command == "sources":
         if args.sources_cmd == "list":
@@ -221,6 +253,13 @@ def main():
             sources_runs_cmd(args)
         else:
             sources.print_help()
+    elif args.command == "analysis":
+        if args.analysis_cmd == "catalog":
+            analysis_catalog_cmd(args)
+        elif args.analysis_cmd == "run":
+            analysis_run_cmd(args)
+        else:
+            analysis.print_help()
     else:
         parser.print_help()
 

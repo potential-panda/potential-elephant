@@ -7,18 +7,29 @@ import elephant.secrets as _secrets
 
 _secrets.load()
 
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-import subprocess
 
 from elephant.source.catalog import get_source, list_sources
 from elephant.source.registry import SourceRegistry
 from elephant.source.run_log import recent_runs
 from elephant.source.scheduler import create_daily_plan
+from elephant.source.scheduler_service import source_scheduler_service
 from elephant.ticker_registry import normalize_ticker
 
-app = FastAPI(title="Elephant Source API v2", version="2.0.0")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    if os.environ.get("ELEPHANT_API2_DISABLE_SCHEDULER", "").lower() not in {"1", "true", "yes"}:
+        source_scheduler_service.start()
+    yield
+    source_scheduler_service.stop()
+
+
+app = FastAPI(title="Elephant Source API v2", version="2.0.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -87,40 +98,25 @@ def api2_source_scheduler_plan(ticker: str | None = None, source_id: str | None 
 
 @app.get("/api2/source-scheduler/status")
 def api2_source_scheduler_status():
-    try:
-        result = subprocess.run(
-            ["systemctl", "--user", "show", "elephant-source-scheduler.service", "--property=ActiveState,SubState,MainPID"],
-            capture_output=True,
-            text=True,
-            timeout=3,
-        )
-        systemd = {}
-        if result.returncode == 0:
-            for line in result.stdout.splitlines():
-                key, _, value = line.partition("=")
-                if key:
-                    systemd[key] = value
-        else:
-            systemd = {"error": result.stderr.strip() or "service not found"}
-    except Exception as exc:
-        systemd = {"error": str(exc)}
+    return source_scheduler_service.status()
 
-    plan = create_daily_plan()
-    return {
-        "service": "elephant-source-scheduler.service",
-        "systemd": systemd,
-        "planned_tasks": len(plan),
-        "next_tasks": [
-            {
-                "source_id": t.source_id,
-                "scope": t.scope,
-                "ticker": t.ticker,
-                "url": t.url,
-                "scheduled_at": t.scheduled_at.isoformat(),
-            }
-            for t in plan[:20]
-        ],
-    }
+
+@app.post("/api2/source-scheduler/start")
+def api2_source_scheduler_start():
+    started = source_scheduler_service.start()
+    return {"started": started, **source_scheduler_service.status()}
+
+
+@app.post("/api2/source-scheduler/stop")
+def api2_source_scheduler_stop():
+    stopped = source_scheduler_service.stop()
+    return {"stopped": stopped, **source_scheduler_service.status()}
+
+
+@app.post("/api2/source-scheduler/replan")
+def api2_source_scheduler_replan():
+    planned = source_scheduler_service.replan()
+    return {"planned": planned, **source_scheduler_service.status()}
 
 
 @app.get("/api2/source-runs")
