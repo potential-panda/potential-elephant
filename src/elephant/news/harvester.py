@@ -9,6 +9,7 @@ import feedparser
 
 from elephant.config import SOURCE_REGISTRY_FILE, TICKERS_FILE
 from elephant.framework import Harvester, HarvesterResult, Store
+from elephant.web_client import open_web_page, visit_page
 from elephant.source_registry import SourceRegistry
 from elephant.ticker_registry import load_us_tickers, normalize_ticker
 
@@ -179,18 +180,11 @@ class NewsHarvester(Harvester):
         return "rss://multiple"
 
     async def _scrape_html_sources(self, all_items: list, scraped_at: datetime) -> None:
-        from playwright.async_api import async_playwright
-        from playwright_stealth import Stealth
-
-        async with async_playwright() as p:
-            browser = await p.chromium.launch(headless=True)
-            context = await browser.new_context()
-            page = await context.new_page()
-            await Stealth().apply_stealth_async(page)
+        async with open_web_page() as page:
 
             for cfg in HTML_NEWS_SOURCES:
                 try:
-                    await page.goto(cfg["url"], wait_until="domcontentloaded", timeout=60000)
+                    await visit_page(page, cfg["url"])
                     await page.wait_for_timeout(2000)
 
                     if cfg["kind"] == "minkabu":
@@ -245,15 +239,10 @@ class NewsHarvester(Harvester):
                 except Exception:
                     logging.exception(f"[News] Failed to scrape HTML source {cfg['source']}")
 
-            await browser.close()
-
     async def _scrape_fool_quote_news(self, all_items: list, scraped_at: datetime, params: dict) -> None:
         sources = _load_fool_sources(params)
         if not sources:
             return
-
-        from playwright.async_api import async_playwright
-        from playwright_stealth import Stealth
 
         extract_script = """(ticker) => {
             const heading = Array.from(document.querySelectorAll('h2, h3')).find(el =>
@@ -276,15 +265,11 @@ class NewsHarvester(Harvester):
             }).filter(item => item.title.length > 20 && item.href);
         }"""
 
-        async with async_playwright() as p:
-            browser = await p.chromium.launch(headless=True)
-            context = await browser.new_context()
-            page = await context.new_page()
-            await Stealth().apply_stealth_async(page)
+        async with open_web_page() as page:
 
             for ticker, quote_url in sources:
                 try:
-                    await page.goto(quote_url, wait_until="domcontentloaded", timeout=60000)
+                    await visit_page(page, quote_url)
                     await page.wait_for_timeout(2000)
                     raw_items = await page.evaluate(extract_script, ticker)
                     parsed = [
@@ -300,8 +285,6 @@ class NewsHarvester(Harvester):
                         logging.info(f"[News] fool_us_quote_news {ticker}: {len(parsed)} items")
                 except Exception:
                     logging.exception(f"[News] Failed to scrape Fool quote page {quote_url}")
-
-            await browser.close()
 
     async def scrape(self, url: str, params: dict) -> dict[str, HarvesterResult]:
         scraped_at = datetime.now()

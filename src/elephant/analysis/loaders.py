@@ -9,6 +9,16 @@ from elephant.config import DATA_DIR, TICKERS_FILE
 from elephant.ticker_registry import get_speed_history, normalize_ticker
 
 
+def _repair_mojibake(value):
+    if not isinstance(value, str) or not value:
+        return value
+    try:
+        repaired = value.encode("latin1").decode("utf-8", errors="ignore")
+    except Exception:
+        return value
+    return repaired or value
+
+
 def _read_latest_ticker_dataset(dataset: str, ticker: str, data_dir: str = DATA_DIR) -> pd.DataFrame:
     canonical = normalize_ticker(ticker)
     pattern = os.path.join(data_dir, f"dataset={dataset}", f"ticker={canonical}", "**", "data.parquet")
@@ -82,9 +92,13 @@ def load_tdnet_for_ticker(ticker: str, days: int = 14, data_dir: str = DATA_DIR)
                 frames.append(df[df["ticker"].fillna("").str.upper().eq(canonical.upper())])
         except Exception:
             continue
-    return pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
+    if not frames:
+        return pd.DataFrame()
+    df = pd.concat(frames, ignore_index=True)
+    for col in df.select_dtypes(include=["object"]).columns:
+        df[col] = df[col].map(_repair_mojibake)
+    return df
 
 
 def load_speed_history(ticker: str, tickers_file: str = TICKERS_FILE) -> list[dict]:
     return get_speed_history(tickers_file, normalize_ticker(ticker))
-

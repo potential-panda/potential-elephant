@@ -1,14 +1,10 @@
-import asyncio
 import hashlib
-import random
 import re
 from datetime import datetime
 from typing import Optional
 
-from playwright.async_api import async_playwright
-from playwright_stealth import Stealth
-
 from elephant.framework import Harvester, HarvesterResult, Store
+from elephant.web_client import open_web_page, visit_page
 
 
 def generate_id(*args):
@@ -29,7 +25,8 @@ class MinkabuHarvester(Harvester):
     def get_url(self, params: dict) -> str:
         if params.get("source_url"):
             return params["source_url"]
-        return f"{self.minkabu_base}/stock/{self.minkabu_ticker}"
+        path = "stock" if self.is_jp else "stocks"
+        return f"{self.minkabu_base}/{path}/{self.minkabu_ticker}"
 
     def _clean_html(self, html: str) -> str:
         """Remove noise to save tokens/storage for later LLM parsing."""
@@ -49,11 +46,8 @@ class MinkabuHarvester(Harvester):
     _ERROR_PHRASES = ["ページが見つかりませんでした", "404 Not Found"]
 
     async def _get_page_content(self, page, url: str) -> Optional[str]:
-        wait_time = random.uniform(3, 8)
-        print(f"Waiting {wait_time:.2f} seconds before loading {url}...")
-        await asyncio.sleep(wait_time)
         try:
-            await page.goto(url, wait_until="domcontentloaded", timeout=60000)
+            await visit_page(page, url, jitter=(3, 8), label="Minkabu")
             # Wait for #contents container as per spec
             await page.wait_for_selector("#contents", timeout=30000)
             container = await page.query_selector("#contents")
@@ -69,11 +63,7 @@ class MinkabuHarvester(Harvester):
             return None
 
     async def scrape(self, url: str, params: dict) -> dict[str, HarvesterResult]:
-        async with async_playwright() as p:
-            browser = await p.chromium.launch(headless=True)
-            context = await browser.new_context()
-            page = await context.new_page()
-            await Stealth().apply_stealth_async(page)
+        async with open_web_page() as page:
 
             scraped_at = datetime.now()
 
@@ -92,8 +82,6 @@ class MinkabuHarvester(Harvester):
                 data_record[sub] = content if content else ""
                 if content:
                     found_any = True
-
-            await browser.close()
 
             if not self.is_jp and self.tickers_file:
                 from elephant.ticker_registry import mark_minkabu_us

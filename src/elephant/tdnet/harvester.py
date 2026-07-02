@@ -19,6 +19,7 @@ from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
 import requests
+from bs4 import BeautifulSoup
 
 from elephant.framework import Harvester, HarvesterResult, Store
 
@@ -40,19 +41,20 @@ def _code_to_ticker(code: str) -> str:
 def _parse_page(html: str, date_str: str) -> list[dict]:
     """Extract disclosure rows from one TDnet listing page."""
     rows = []
-    # Each row: <td class="*-L kjTime">HH:MM</td> ... <td class="*-M kjCode">NNNNN</td> ...
-    pattern = re.compile(
-        r'class="[^"]*kjTime[^"]*"[^>]*>\s*(\d{2}:\d{2})\s*</td>'
-        r'.*?class="[^"]*kjCode[^"]*"[^>]*>\s*(\d{5})\s*</td>'
-        r'.*?class="[^"]*kjName[^"]*"[^>]*>\s*(.*?)\s*</td>'
-        r'.*?class="[^"]*kjTitle[^"]*"[^>]*>.*?href="([^"]+)"[^>]*>(.*?)</a>',
-        re.DOTALL,
-    )
-    for m in pattern.finditer(html):
-        time_str, code, company, href, title = m.groups()
+    soup = BeautifulSoup(html, "html.parser")
+    for tr in soup.select("table#main-list-table tr"):
+        time_td = tr.select_one("td.kjTime")
+        code_td = tr.select_one("td.kjCode")
+        company_td = tr.select_one("td.kjName")
+        title_td = tr.select_one("td.kjTitle a")
+        if not (time_td and code_td and company_td and title_td):
+            continue
+        time_str = time_td.get_text(" ", strip=True)
+        code = code_td.get_text(" ", strip=True)
+        company = company_td.get_text(" ", strip=True)
+        title = title_td.get_text(" ", strip=True)
+        href = title_td.get("href", "")
         ticker = _code_to_ticker(code)
-        company = re.sub(r"\s+", " ", company).strip()
-        title = re.sub(r"\s+", " ", title).strip()
         doc_url = href if href.startswith("http") else f"{DOC_BASE}{href}"
         doc_id = hashlib.md5(f"{date_str}|{code}|{href}".encode()).hexdigest()
         rows.append({
@@ -78,6 +80,7 @@ def _fetch_date(date_str: str, watched: set[str]) -> list[dict]:
             if resp.status_code == 404:
                 break
             resp.raise_for_status()
+            resp.encoding = "utf-8"
             rows = _parse_page(resp.text, date_str)
             if not rows:
                 break

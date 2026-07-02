@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { APP_BASE } from '../app-base'
+import TickerLink from './TickerLink'
 
 const QUEUE_LABELS = {
   A: { label: 'River Candidates', color: '#00dc96', bg: 'rgba(0,220,150,0.08)', border: 'rgba(0,220,150,0.3)' },
@@ -93,7 +94,10 @@ function CandidateRow({ row }) {
         className="hover:bg-white/5 transition-colors"
       >
         <td className="py-2 pl-3 pr-2" style={{ minWidth: 120 }}>
-          <div style={{ color: '#e2eaf2', fontFamily: 'monospace', fontSize: 13, fontWeight: 600 }}>{row.ticker}</div>
+          <TickerLink
+            ticker={row.ticker}
+            className="font-mono text-[13px] font-semibold text-emerald-400 hover:text-emerald-300 hover:underline"
+          />
           {row.name && <div style={{ color: '#5a7080', fontSize: 11, marginTop: 1 }}>{row.name}</div>}
         </td>
         <td className="py-2 px-2 text-right" style={{ color: '#bfcfdf', fontSize: 12, fontFamily: 'monospace' }}>

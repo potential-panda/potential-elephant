@@ -2,30 +2,27 @@ import { useState, useEffect } from 'react'
 import Layout from './components/Layout'
 import Tickers from './components/Tickers'
 import Digest from './components/Digest'
-import Schedule from './components/Schedule'
 import Tree from './components/Tree'
 import Dive from './components/Dive'
-import Query from './components/Query'
-import Stats from './components/Stats'
 import Detail from './components/Detail'
 import Candidates from './components/Candidates'
 import Watchlist from './components/Watchlist'
+import System from './components/System'
 
 const TAB_COMPONENTS = {
   candidates: Candidates,
   watchlist:  Watchlist,
   tickers: Tickers,
   digest: Digest,
-  schedule: Schedule,
   tree: Tree,
   dive: Dive,
-  query: Query,
-  stats: Stats,
+  system: System,
   detail: Detail,
 }
 
 function tabFromHash() {
-  const hash = window.location.hash.slice(1).split('/')[0]
+  const hash = window.location.hash.slice(1).replace(/^\/+/, '').split('/')[0]
+  if (hash === 'query' || hash === 'schedule' || hash === 'stats') return 'system'
   return TAB_COMPONENTS[hash] ? hash : 'candidates'
 }
 
@@ -39,7 +36,13 @@ export default function App() {
   }, [])
 
   const handleTabChange = (tab) => {
-    window.location.hash = tab
+    if (tab === 'tickers') {
+      window.location.hash = '/tickers/JP'
+    } else if (tab === 'system') {
+      window.location.hash = '/system/query'
+    } else {
+      window.location.hash = `/${tab}`
+    }
     setActiveTab(tab)
   }
 

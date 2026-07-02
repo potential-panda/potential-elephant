@@ -13,7 +13,7 @@ const DATASETS = [
 const DATASET_VALUES = new Set(DATASETS.map((d) => d.value))
 
 function datasetFromHash() {
-  const sub = window.location.hash.slice(1).split('/')[1]
+  const sub = window.location.hash.slice(1).replace(/^\/+/, '').split('/')[1]
   return sub && DATASET_VALUES.has(sub) ? sub : 'yahoo_comments'
 }
 
@@ -217,7 +217,7 @@ export default function Query() {
   }, [])
 
   const handleDatasetChange = (value) => {
-    window.location.hash = `query/${value}`
+    window.location.hash = `/query/${value}`
     setDataset(value)
     setResults(null)
   }

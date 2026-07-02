@@ -1,12 +1,10 @@
 import asyncio
 from dataclasses import dataclass
-from typing import Iterable, Optional
-
-from playwright.async_api import Page, async_playwright
-from playwright_stealth import Stealth
+from typing import Iterable
 
 from elephant.source_registry import SourceAvailability
 from elephant.ticker_registry import is_jp_ticker, normalize_ticker
+from elephant.web_client import open_web_page, page_has_selector, visit_page
 
 
 @dataclass(frozen=True)
@@ -23,24 +21,6 @@ class SourceAdapter:
 
 def _market(ticker: str) -> str:
     return "JP" if is_jp_ticker(ticker) else "US"
-
-
-async def _new_page():
-    playwright = await async_playwright().start()
-    browser = await playwright.chromium.launch(headless=True)
-    context = await browser.new_context()
-    page = await context.new_page()
-    await Stealth().apply_stealth_async(page)
-    return playwright, browser, page
-
-
-async def _page_has_selector(page: Page, url: str, selector: str, timeout: int = 20000) -> tuple[bool, Optional[str]]:
-    try:
-        await page.goto(url, wait_until="domcontentloaded", timeout=60000)
-        await page.wait_for_selector(selector, timeout=timeout)
-        return True, None
-    except Exception as exc:
-        return False, str(exc)
 
 
 class FoolQuoteNewsAdapter(SourceAdapter):
@@ -63,11 +43,10 @@ class FoolQuoteNewsAdapter(SourceAdapter):
         if _market(canonical) not in self.supports_markets:
             return SourceAvailability(canonical, self.source_id, "unavailable", source_symbol=source_symbol, urls=[])
 
-        playwright, browser, page = await _new_page()
-        try:
+        async with open_web_page(locale="en-US", timezone_id="America/New_York") as page:
             last_error = None
             for url in self.urls_for(canonical):
-                ok, error = await _page_has_selector(page, url, "h2, h3")
+                ok, error = await page_has_selector(page, url, "h2, h3")
                 if ok:
                     found = await page.evaluate(
                         """(ticker) => Array.from(document.querySelectorAll('h2, h3')).some(el =>
@@ -79,9 +58,6 @@ class FoolQuoteNewsAdapter(SourceAdapter):
                         return SourceAvailability(canonical, self.source_id, "available", source_symbol, [url])
                 last_error = error
             return SourceAvailability(canonical, self.source_id, "unavailable", source_symbol, [], error=last_error)
-        finally:
-            await browser.close()
-            await playwright.stop()
 
 
 class MinkabuAdapter(SourceAdapter):
@@ -100,23 +76,38 @@ class MinkabuAdapter(SourceAdapter):
             source_symbol = canonical.replace(".T", "")
             return source_symbol, f"https://minkabu.jp/stock/{source_symbol}"
         source_symbol = canonical
-        return source_symbol, f"https://us.minkabu.jp/stock/{source_symbol}"
+        return source_symbol, f"https://us.minkabu.jp/stocks/{source_symbol}"
 
     async def check_availability(self, ticker: str) -> SourceAvailability:
         canonical = normalize_ticker(ticker.strip().upper())
         source_symbol, base_url = self.url_for(canonical)
-        playwright, browser, page = await _new_page()
-        try:
-            ok, error = await _page_has_selector(page, f"{base_url}/analysis", "#contents")
-            if not ok:
-                return SourceAvailability(canonical, self.source_id, "unavailable", source_symbol, [], error=error)
-            html = await page.locator("#contents").inner_html()
-            if "ページが見つかりませんでした" in html or "404 Not Found" in html:
-                return SourceAvailability(canonical, self.source_id, "unavailable", source_symbol, [], error="not found")
+        if not is_jp_ticker(canonical):
             return SourceAvailability(canonical, self.source_id, "available", source_symbol, [base_url])
-        finally:
-            await browser.close()
-            await playwright.stop()
+        async with open_web_page() as page:
+            probe_urls = [base_url, f"{base_url}/analysis"]
+            last_error = None
+            for url in probe_urls:
+                try:
+                    response = await visit_page(page, url)
+                    if response and response.status >= 400:
+                        last_error = f"HTTP {response.status}"
+                        continue
+                    try:
+                        await page.wait_for_selector("#contents", timeout=20000)
+                    except Exception as exc:
+                        last_error = str(exc)
+                        continue
+                    html = await page.locator("#contents").inner_html()
+                    if "ページが見つかりませんでした" in html or "404 Not Found" in html:
+                        last_error = "not found"
+                        continue
+                    body = await page.locator("body").inner_text(timeout=5000)
+                    if "株価" in body or "予想" in body or "アナリスト" in body or "個人予想" in body:
+                        return SourceAvailability(canonical, self.source_id, "available", source_symbol, [url])
+                    last_error = "page content missing stock markers"
+                except Exception as exc:
+                    last_error = str(exc)
+            return SourceAvailability(canonical, self.source_id, "unavailable", source_symbol, [], error=last_error)
 
 
 class YahooJpBbsAdapter(SourceAdapter):
@@ -135,17 +126,13 @@ class YahooJpBbsAdapter(SourceAdapter):
 
     async def check_availability(self, ticker: str) -> SourceAvailability:
         canonical, url = self.url_for(ticker)
-        playwright, browser, page = await _new_page()
-        try:
-            ok, error = await _page_has_selector(
+        async with open_web_page() as page:
+            ok, error = await page_has_selector(
                 page,
                 url,
                 "[class*='_EvaluationGraph__graph_'], [class*='_InfiniteBbsList__item_']",
             )
             return SourceAvailability(canonical, self.source_id, "available" if ok else "unavailable", canonical, [url] if ok else [], error=error)
-        finally:
-            await browser.close()
-            await playwright.stop()
 
 
 ADAPTERS = {

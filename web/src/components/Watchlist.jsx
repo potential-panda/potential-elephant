@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { APP_BASE } from '../app-base'
+import TickerLink from './TickerLink'
 
 function pct(v, opts = {}) {
   if (v == null) return <span style={{ color: '#3a5060' }}>—</span>
@@ -62,9 +63,10 @@ function PositionCard({ pos, onRemove }) {
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 12 }}>
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <span style={{ color: '#e2eaf2', fontFamily: 'monospace', fontSize: 16, fontWeight: 700 }}>
-              {pos.ticker}
-            </span>
+            <TickerLink
+              ticker={pos.ticker}
+              className="text-emerald-400 hover:text-emerald-300 hover:underline font-mono text-[16px] font-bold"
+            />
             {snap.market && (
               <span style={{ fontSize: 10, color: '#3a5060', fontFamily: 'monospace',
                 border: '1px solid rgba(255,255,255,0.08)', borderRadius: 3, padding: '1px 5px' }}>

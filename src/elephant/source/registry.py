@@ -60,6 +60,33 @@ class SourceRegistry:
     def get_source(self, ticker: str, source_id: str) -> Optional[dict]:
         return self.get_ticker(ticker).get("sources", {}).get(source_id)
 
+    def _assumed_availability(self, ticker: str, source_id: str) -> dict | None:
+        from elephant.source.availability import JP_PATTERN_SOURCES, source_symbol_and_urls
+        from elephant.source.catalog import get_source
+
+        source = get_source(source_id)
+        canonical = normalize_ticker(str(ticker).strip().upper())
+        market = market_for_ticker(canonical)
+        if source.scope != "ticker" or market not in source.markets:
+            return None
+        if source.source_id == "daily_prices" or (market == "JP" and source.source_id in JP_PATTERN_SOURCES):
+            symbol, urls = source_symbol_and_urls(source_id, canonical)
+            return asdict(SourceAvailability(canonical, source_id, "available", symbol, urls))
+        return None
+
+    def resolved_sources(self, ticker: str) -> dict[str, dict]:
+        canonical = normalize_ticker(str(ticker).strip().upper())
+        resolved = dict(self.get_ticker(canonical).get("sources", {}))
+        from elephant.source.catalog import list_sources
+
+        for source in list_sources(scope="ticker"):
+            if source.source_id in resolved and resolved[source.source_id].get("status") == "available" and resolved[source.source_id].get("urls"):
+                continue
+            assumed = self._assumed_availability(canonical, source.source_id)
+            if assumed:
+                resolved[source.source_id] = assumed
+        return resolved
+
     def upsert_availability(self, availability: SourceAvailability) -> None:
         ticker = availability.ticker
         record = self.data.setdefault(ticker, {"market": market_for_ticker(ticker), "sources": {}})
@@ -67,12 +94,34 @@ class SourceRegistry:
 
     def available_sources(self, source_id: str | None = None) -> list[tuple[str, str, dict]]:
         rows = []
-        for ticker, record in sorted(self.data.items()):
-            for sid, source in sorted(record.get("sources", {}).items()):
-                if source_id and sid != source_id:
+        from elephant.source.catalog import list_sources
+        from elephant.source.tickers import all_known_tickers
+
+        if source_id:
+            sources = [s for s in list_sources(scope="ticker") if s.source_id == source_id]
+        else:
+            sources = list_sources(scope="ticker")
+
+        tickers = []
+        seen = set()
+        for ticker in list(all_known_tickers()) + self.tickers():
+            canonical = normalize_ticker(str(ticker).strip().upper())
+            if canonical and canonical not in seen:
+                seen.add(canonical)
+                tickers.append(canonical)
+
+        for ticker in tickers:
+            record = self.get_ticker(ticker)
+            raw_sources = record.get("sources", {})
+            for source in sources:
+                sid = source.source_id
+                source_row = raw_sources.get(sid)
+                if source_row and source_row.get("status") == "available" and source_row.get("urls"):
+                    rows.append((ticker, sid, source_row))
                     continue
-                if source.get("status") == "available" and source.get("urls"):
-                    rows.append((ticker, sid, source))
+                assumed = self._assumed_availability(ticker, sid)
+                if assumed:
+                    rows.append((ticker, sid, assumed))
         return rows
 
     def mark_harvested(self, ticker: str, source_id: str, row_count: int = 0, error: str | None = None) -> None:
@@ -88,4 +137,3 @@ class SourceRegistry:
                 source["status"] = "degraded"
         else:
             source["consecutive_failures"] = 0
-

@@ -2,13 +2,9 @@ const TABS = [
   { id: 'candidates',  label: 'Candidates'  },
   { id: 'watchlist',   label: 'Watchlist'   },
   { id: 'digest',      label: 'Digest'      },
-  { id: 'detail',     label: 'Detail'     },
-  { id: 'dive',       label: 'Dive'       },
-  { id: 'query',      label: 'Query'      },
   { id: 'tree',       label: 'Tree'       },
   { id: 'tickers',    label: 'Tickers'    },
-  { id: 'schedule',   label: 'Schedule'   },
-  { id: 'stats',      label: 'Stats'      },
+  { id: 'system',     label: 'System'     },
 ]
 
 export default function Layout({ activeTab, onTabChange, children }) {

@@ -18,7 +18,7 @@ from elephant.source.harvest import harvest_task, tasks_for_ticker
 from elephant.source.registry import SourceRegistry
 from elephant.source.run_log import recent_runs
 from elephant.source.scheduler import create_daily_plan
-from elephant.source.tickers import known_tickers
+from elephant.source.tickers import all_known_tickers, known_tickers
 from elephant.ticker_registry import normalize_ticker
 from elephant.analysis.catalog import list_data
 from elephant.analysis.pipeline import analyze_ticker, save_analysis
@@ -39,7 +39,7 @@ def sources_check_cmd(args):
     if args.ticker:
         tickers = [normalize_ticker(args.ticker)]
     elif args.all:
-        tickers = known_tickers()
+        tickers = all_known_tickers()
     else:
         print("Use --ticker or --all.")
         return

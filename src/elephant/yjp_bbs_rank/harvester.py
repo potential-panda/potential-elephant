@@ -1,29 +1,14 @@
-import asyncio
-import random
 import re
 from datetime import datetime, timedelta
-from pathlib import Path
-
-from playwright.async_api import async_playwright
-from playwright_stealth import Stealth
 
 from elephant.framework import Harvester, Store
 from elephant.ticker_registry import load_cache, save_cache
+from elephant.web_client import open_web_page, visit_page
 
 BASE_URL = "https://finance.yahoo.co.jp/stocks/ranking/bbs?market=all&term=daily"
 
 CACHE_TTL_DAYS = 28
 CACHE_MAX_TICKERS = 300
-
-USER_AGENTS = [
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36",
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) "
-    "Chrome/118.0.0.0 Safari/537.36",
-    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36",
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/119.0",
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) "
-    "Version/17.0 Safari/605.1.15",
-]
 
 
 class BbsRankHarvester(Harvester):
@@ -37,12 +22,8 @@ class BbsRankHarvester(Harvester):
 
     async def _scrape_page(self, page, page_num: int) -> list[str]:
         url = BASE_URL if page_num == 1 else f"{BASE_URL}&page={page_num}"
-        wait_time = random.uniform(3, 8)
-        print(f"[BbsRank] Waiting {wait_time:.2f}s before loading page {page_num}...")
-        await asyncio.sleep(wait_time)
-
         try:
-            await page.goto(url, wait_until="domcontentloaded", timeout=60000)
+            await visit_page(page, url, jitter=(3, 8), label="BbsRank")
             await page.wait_for_selector("table", timeout=30000)
         except Exception as e:
             print(f"[BbsRank] Error loading page {page_num}: {e}")
@@ -62,22 +43,14 @@ class BbsRankHarvester(Harvester):
         return tickers
 
     async def scrape(self, url: str, params: dict) -> dict:
-        user_agent = random.choice(USER_AGENTS)
         all_tickers = []
 
-        async with async_playwright() as p:
-            browser = await p.chromium.launch(headless=True)
-            context = await browser.new_context(user_agent=user_agent)
-            page = await context.new_page()
-            await Stealth().apply_stealth_async(page)
-
+        async with open_web_page() as page:
             for page_num in range(1, self.max_pages + 1):
                 tickers = await self._scrape_page(page, page_num)
                 for t in tickers:
                     if t not in all_tickers:
                         all_tickers.append(t)
-
-            await browser.close()
 
         if all_tickers:
             self._update_cache(all_tickers)
@@ -127,7 +100,10 @@ class BbsRankHarvester(Harvester):
         if len(cache) > CACHE_MAX_TICKERS:
             sorted_entries = sorted(
                 cache.items(),
-                key=lambda x: (_last_seen(x[1]), today_tickers.index(x[0]) if x[0] in today_tickers else 999),
+                key=lambda x: (
+                    _last_seen(x[1]),
+                    today_tickers.index(x[0]) if x[0] in today_tickers else 999,
+                ),
                 reverse=True,
             )
             cache = dict(sorted_entries[:CACHE_MAX_TICKERS])
@@ -141,4 +117,6 @@ class BbsRankHarvester(Harvester):
         with open(self.tickers_file, "w") as f:
             f.write("\n".join(final_list) + "\n")
 
-        print(f"[BbsRank] {len(today_tickers)} tickers today + {len(retained)} retained = {len(final_list)} total in tickers.txt")
+        print(
+            f"[BbsRank] {len(today_tickers)} tickers today + {len(retained)} retained = {len(final_list)} total in tickers.txt"
+        )

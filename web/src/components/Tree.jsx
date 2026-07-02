@@ -76,7 +76,7 @@ function TickerChip({ node, priceData, avgs }) {
 
   return (
     <a
-      href={`#detail/${node.ticker}`}
+      href={`/#/detail/${encodeURIComponent(node.ticker)}`}
       className={[
         'inline-flex flex-col px-3 py-2 rounded border text-xs transition-colors min-w-[120px]',
         chipClass,

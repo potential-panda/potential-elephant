@@ -329,7 +329,7 @@ class Diver:
     def _links_section(self, ticker_t: str) -> str:
         bare = ticker_t.replace(".T", "")
         is_jp = ticker_t.endswith(".T")
-        minkabu_url = f"https://minkabu.jp/stock/{bare}" if is_jp else f"https://us.minkabu.jp/stock/{bare}"
+        minkabu_url = f"https://minkabu.jp/stock/{bare}" if is_jp else f"https://us.minkabu.jp/stocks/{bare}"
         lines = [
             "", "", "---", "## Links",
             f"- [Yahoo Finance JP BBS](https://finance.yahoo.co.jp/quote/{ticker_t}/forum)",

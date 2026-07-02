@@ -12,8 +12,22 @@ async function apiFetch(path, options = {}) {
   return res.json()
 }
 
+async function api2Fetch(path, options = {}) {
+  const res = await fetch(`${APP_BASE}/api2${path}`, {
+    headers: { 'Content-Type': 'application/json', ...options.headers },
+    ...options,
+  })
+  if (!res.ok) {
+    const text = await res.text().catch(() => res.statusText)
+    throw new Error(`${res.status} ${text}`)
+  }
+  return res.json()
+}
+
 export const getTickers = () => apiFetch('/tickers')
-export const getDetail = (ticker) => apiFetch(`/detail/${encodeURIComponent(ticker)}`)
+export const getTickersV2 = () => api2Fetch('/tickers')
+export const getTickersOverview = () => api2Fetch('/tickers/overview')
+export const getDetail = (ticker) => api2Fetch(`/detail/${encodeURIComponent(ticker)}`)
 
 export const getDigestLatest = () => apiFetch('/digest/latest')
 export const getDigestList = () => apiFetch('/digest/list')
@@ -23,20 +37,28 @@ export const generateDigest = () =>
 
 export const getScheduleStatus = () => apiFetch('/schedule/status')
 export const getSchedulePlan = () => apiFetch('/schedule/plan')
+export const getSourceSchedulerStatus = () => api2Fetch('/source-scheduler/status')
+export const getSourceSchedulerPlan = () => api2Fetch('/source-scheduler/plan')
+export const getSourceRuns = (limit = 20) => api2Fetch(`/source-runs?limit=${encodeURIComponent(limit)}`)
+export const getSourceRegistry = () => api2Fetch('/source-registry')
+export const getSourceDefinitions = (scope = 'ticker') => api2Fetch(`/sources?scope=${encodeURIComponent(scope)}`)
 
-export const getTree = () => apiFetch('/tree')
+export const getTree = () => api2Fetch('/tree')
 
 export const startDive = (ticker) =>
   apiFetch('/dive', { method: 'POST', body: JSON.stringify({ ticker }) })
+export const startDiveV2 = (ticker) =>
+  api2Fetch('/dive', { method: 'POST', body: JSON.stringify({ ticker }) })
 export const listDives = () => apiFetch('/dive/list')
 export const getDiveLatest = (ticker) => apiFetch(`/dive/${ticker}/latest`)
 
 export const getJob = (jobId) => apiFetch(`/jobs/${jobId}`)
+export const getJobV2 = (jobId) => api2Fetch(`/jobs/${jobId}`)
 
 export const getPriceChanges = (tickers) =>
-  apiFetch(`/prices?tickers=${encodeURIComponent(tickers.join(','))}`)
+  api2Fetch(`/prices?tickers=${encodeURIComponent(tickers.join(','))}`)
 
-export const getStats = () => apiFetch('/stats')
+export const getStats = () => api2Fetch('/stats')
 
 
 export const queryDataset = ({ dataset, ticker, keyword, limit = 50 }) => {

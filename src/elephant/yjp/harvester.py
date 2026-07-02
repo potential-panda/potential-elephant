@@ -7,21 +7,10 @@ from datetime import datetime
 from typing import Optional
 
 import pandas as pd
-from playwright.async_api import async_playwright
-from playwright_stealth import Stealth
 
 from elephant.framework import Harvester, HarvesterResult, Store
+from elephant.web_client import open_web_page, visit_page
 from elephant.ticker_registry import update_speed
-
-USER_AGENTS = [
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36",
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) "
-    "Chrome/118.0.0.0 Safari/537.36",
-    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36",
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/119.0",
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) "
-    "Version/17.0 Safari/605.1.15",
-]
 
 
 def generate_id(*args):
@@ -64,12 +53,8 @@ class YahooFinanceHarvester(Harvester):
 
     async def _get_page_content(self, page, url: str) -> bool:
         """Navigates to the URL with randomized jitter and stealth."""
-        wait_time = random.uniform(3, 8)
-        print(f"Waiting {wait_time:.2f} seconds before loading {url}...")
-        await asyncio.sleep(wait_time)
-
         try:
-            await page.goto(url, wait_until="domcontentloaded", timeout=60000)
+            await visit_page(page, url, jitter=(3, 8))
             # Use class*= attribute selectors — stable across CSS module hash changes
             await page.wait_for_selector(
                 "[class*='_EvaluationGraph__graph_'], [class*='_InfiniteBbsList__item_']",
@@ -95,14 +80,7 @@ class YahooFinanceHarvester(Harvester):
     async def scrape(self, url: str, params: dict) -> dict[str, HarvesterResult]:
         max_pages = params.get("max_pages", 10)
         max_comments = params.get("max_comments", 200)
-        user_agent = random.choice(USER_AGENTS)
-
-        async with async_playwright() as p:
-            browser = await p.chromium.launch(headless=True)
-            context = await browser.new_context(user_agent=user_agent)
-            page = await context.new_page()
-            await Stealth().apply_stealth_async(page)
-
+        async with open_web_page() as page:
             evaluation_data = {}
             all_comments = []
             stop_scrolling = False
@@ -200,8 +178,6 @@ class YahooFinanceHarvester(Harvester):
                             )
                         except Exception:
                             break
-            await browser.close()
-
             results = {}
             if evaluation_data:
                 results["yahoo_evaluations"] = HarvesterResult(

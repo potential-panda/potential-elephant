@@ -1,8 +1,11 @@
 from elephant.source.catalog import get_source, list_sources
 from elephant.source.registry import SourceAvailability, SourceRegistry
 from elephant.source.run_log import finish_run, start_run
-from elephant.source.tickers import known_tickers, market_for_ticker
+from elephant.source.tickers import all_known_tickers, market_for_ticker
 from elephant.ticker_registry import normalize_ticker
+
+
+JP_PATTERN_SOURCES = {"minkabu", "yahoo_jp_bbs"}
 
 
 def source_symbol_and_urls(source_id: str, ticker: str) -> tuple[str, list[str]]:
@@ -11,7 +14,7 @@ def source_symbol_and_urls(source_id: str, ticker: str) -> tuple[str, list[str]]
         if canonical.endswith(".T"):
             symbol = canonical.replace(".T", "")
             return symbol, [f"https://minkabu.jp/stock/{symbol}"]
-        return canonical, [f"https://us.minkabu.jp/stock/{canonical}"]
+        return canonical, [f"https://us.minkabu.jp/stocks/{canonical}"]
     if source_id == "yahoo_jp_bbs":
         return canonical, [f"https://finance.yahoo.co.jp/quote/{canonical}/forum"]
     if source_id == "fool_quote_news":
@@ -51,7 +54,8 @@ async def check_ticker_source(ticker: str, source_id: str, registry: SourceRegis
 
     run = start_run("availability_check", source_id, source.scope, canonical)
     try:
-        if not source.availability_check_required:
+        assume_available = market == "JP" and source.source_id in JP_PATTERN_SOURCES
+        if assume_available or not source.availability_check_required:
             symbol, urls = source_symbol_and_urls(source_id, canonical)
             availability = SourceAvailability(canonical, source_id, "available", symbol, urls)
         else:
@@ -77,7 +81,7 @@ async def check_sources(
     registry: SourceRegistry | None = None,
 ) -> list[SourceAvailability]:
     registry = registry or SourceRegistry()
-    tickers = tickers or known_tickers()
+    tickers = tickers or all_known_tickers()
     sources = [get_source(source_id)] if source_id else list_sources(scope="ticker")
     results = []
     for ticker in tickers:
@@ -89,4 +93,3 @@ async def check_sources(
                 continue
             results.append(await check_ticker_source(canonical, source.source_id, registry))
     return results
-

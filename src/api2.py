@@ -1,5 +1,6 @@
 import os
 import sys
+from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(__file__))
 
@@ -11,6 +12,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from elephant.source.catalog import get_source, list_sources
@@ -18,8 +20,16 @@ from elephant.source.registry import SourceRegistry
 from elephant.source.run_log import recent_runs
 from elephant.source.scheduler import create_daily_plan
 from elephant.source.scheduler_service import source_scheduler_service
+from elephant.api.tickers import get_tickers as get_tickers_v1
+from elephant.api.dive import start_dive as start_dive_v1, get_job as get_dive_job_v1
+from elephant.api.detail_v2 import get_detail as get_detail_v2
+from elephant.api.tree import get_tree as get_tree_v1
+from elephant.config import TICKERS_FILE
+from elephant.ticker_registry import is_jp_ticker, load_cache, load_us_tickers
 from elephant.ticker_registry import normalize_ticker
 from elephant.analysis.batch import run_daily_analysis
+from elephant.api import datasets
+from elephant.api.prices import get_price_changes
 from elephant.analysis.pipeline import analyze_ticker, load_latest_score, save_analysis
 
 
@@ -46,6 +56,10 @@ class SourceCheckRequest(BaseModel):
     source_id: str | None = None
 
 
+class DiveRequest(BaseModel):
+    ticker: str
+
+
 class AnalysisRequest(BaseModel):
     ticker: str | None = None
     limit: int | None = None
@@ -55,6 +69,59 @@ class AnalysisRequest(BaseModel):
 @app.get("/api2/sources")
 def api2_sources(scope: str | None = Query(None, pattern="^(market|ticker)$")):
     return [s.to_dict() for s in list_sources(scope=scope)]
+
+
+@app.get("/api2/tickers")
+def api2_tickers():
+    return get_tickers_v1()
+
+
+@app.get("/api2/tickers/overview")
+def api2_tickers_overview():
+    cache = load_cache(TICKERS_FILE)
+    us_status = load_us_tickers(TICKERS_FILE)
+    registry = SourceRegistry()
+
+    rank_map: dict[str, int] = {}
+    try:
+        with Path(TICKERS_FILE).open(encoding="utf-8") as f:
+            for idx, line in enumerate(f, 1):
+                ticker = line.strip()
+                if ticker:
+                    rank_map[ticker] = idx
+    except FileNotFoundError:
+        pass
+
+    jp_tickers = set(rank_map)
+    us_tickers = {t for t in (set(cache) | set(us_status)) if not is_jp_ticker(t)}
+
+    def build_row(ticker: str) -> dict:
+        entry = cache.get(ticker) or {}
+        if isinstance(entry, str):
+            entry = {"last_seen": entry, "speed_history": []}
+        sources = registry.resolved_sources(ticker)
+        return {
+            "ticker": ticker,
+            "market": "JP" if ticker in jp_tickers else "US",
+            "bbs_rank": rank_map.get(ticker),
+            "last_seen": entry.get("last_seen"),
+            "last_scraped_at": entry.get("last_scraped_at"),
+            "speed_history": entry.get("speed_history", []),
+            "sources": sources,
+            "in_tickers_us_file": ticker in us_status,
+            "us_bbs": us_status.get(ticker, {}).get("bbs"),
+            "us_minkabu": us_status.get(ticker, {}).get("minkabu"),
+        }
+
+    jp_items = sorted((build_row(t) for t in jp_tickers), key=lambda x: x["bbs_rank"] or 9999)
+    us_items = sorted((build_row(t) for t in us_tickers), key=lambda x: x["ticker"])
+
+    return {
+        "jp_items": jp_items,
+        "us_items": us_items,
+        "tickers_file": TICKERS_FILE,
+        "cache_file": TICKERS_FILE.replace("tickers.txt", "tickers.cache.json"),
+    }
 
 
 @app.get("/api2/sources/{source_id}")
@@ -132,6 +199,41 @@ def api2_source_runs(limit: int = 100):
     return recent_runs(limit=limit)
 
 
+@app.get("/api2/detail/{ticker}")
+def api2_detail(ticker: str):
+    return get_detail_v2(ticker)
+
+
+@app.get("/api2/tree")
+def api2_tree():
+    return get_tree_v1()
+
+
+@app.post("/api2/dive")
+def api2_dive_start(req: DiveRequest):
+    job_id = start_dive_v1(req.ticker)
+    return {"job_id": job_id}
+
+
+@app.get("/api2/jobs/{job_id}")
+def api2_job_status(job_id: str):
+    result = get_dive_job_v1(job_id)
+    if not result:
+        raise HTTPException(status_code=404, detail="Job not found")
+    return result
+
+
+@app.get("/api2/prices")
+def api2_prices(tickers: str = Query(..., description="Comma-separated ticker list")):
+    ticker_list = [t.strip() for t in tickers.split(",") if t.strip()]
+    return get_price_changes(ticker_list)
+
+
+@app.get("/api2/stats")
+def api2_stats():
+    return datasets.get_stats()
+
+
 @app.post("/api2/analysis/run")
 def api2_analysis_run(req: AnalysisRequest):
     if req.ticker:
@@ -149,6 +251,13 @@ def api2_analysis_latest(ticker: str):
     if not result:
         raise HTTPException(status_code=404, detail="No analysis score found")
     return result
+
+
+# --- Serve frontend ---
+
+DIST = os.path.join(os.path.dirname(__file__), "..", "web", "dist")
+if os.path.exists(DIST):
+    app.mount("/", StaticFiles(directory=DIST, html=True), name="frontend")
 
 
 if __name__ == "__main__":
