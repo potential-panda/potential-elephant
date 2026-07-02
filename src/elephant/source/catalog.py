@@ -27,6 +27,18 @@ class SourceDefinition:
 
 
 SOURCES: dict[str, SourceDefinition] = {
+    "yjp_bbs_rank": SourceDefinition(
+        source_id="yjp_bbs_rank",
+        name="Yahoo JP BBS Ranking",
+        scope="market",
+        markets=("JP",),
+        dataset="tickers.txt,tickers.cache.json",
+        harvester="yjp_bbs_rank",
+        availability_check_required=False,
+        cadence="daily",
+        schedule_time="09:47",
+        description="Maintains the known ticker universe from Yahoo JP BBS ranking using the existing LRU cache behavior.",
+    ),
     "tdnet_disclosures": SourceDefinition(
         source_id="tdnet_disclosures",
         name="TDnet Disclosures",
@@ -108,4 +120,3 @@ def get_source(source_id: str) -> SourceDefinition:
         return SOURCES[source_id]
     except KeyError:
         raise ValueError(f"Unknown source: {source_id}") from None
-

@@ -122,3 +122,9 @@ def api2_source_scheduler_replan():
 @app.get("/api2/source-runs")
 def api2_source_runs(limit: int = 100):
     return recent_runs(limit=limit)
+
+
+if __name__ == "__main__":
+    import uvicorn
+
+    uvicorn.run("api2:app", host="0.0.0.0", port=9765, reload=False)

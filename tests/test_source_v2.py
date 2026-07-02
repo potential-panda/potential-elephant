@@ -16,9 +16,10 @@ def test_source_catalog_defines_market_and_ticker_sources():
     market = {s.source_id for s in list_sources(scope="market")}
     ticker = {s.source_id for s in list_sources(scope="ticker")}
 
-    assert market == {"tdnet_disclosures"}
+    assert market == {"tdnet_disclosures", "yjp_bbs_rank"}
     assert {"daily_prices", "yahoo_jp_bbs", "minkabu", "fool_quote_news"} <= ticker
     assert get_source("tdnet_disclosures").schedule_time == "19:00"
+    assert get_source("yjp_bbs_rank").schedule_time == "09:47"
 
 
 def test_source_symbol_resolution_consumes_source_specific_ticker_gaps():
@@ -63,6 +64,7 @@ def test_daily_plan_includes_market_sources_and_registry_ticker_sources(tmp_path
 
     plan = create_daily_plan(registry=registry, tickers=[])
 
+    assert any(t.source_id == "yjp_bbs_rank" and t.scope == "market" and t.scheduled_at.strftime("%H:%M") == "09:47" for t in plan)
     assert any(t.source_id == "tdnet_disclosures" and t.scope == "market" and t.scheduled_at.strftime("%H:%M") == "19:00" for t in plan)
     assert any(t.source_id == "minkabu" and t.ticker == "7203.T" and t.url == "https://minkabu.jp/stock/7203" for t in plan)
 

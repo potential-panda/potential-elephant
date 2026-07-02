@@ -2,7 +2,7 @@ import asyncio
 from dataclasses import dataclass
 from datetime import datetime
 
-from elephant.config import DATA_DIR
+from elephant.config import DATA_DIR, TICKERS_FILE
 from elephant.framework import Store
 from elephant.minkabu.harvester import MinkabuHarvester
 from elephant.news.harvester import NewsHarvester
@@ -13,6 +13,7 @@ from elephant.source.run_log import finish_run, start_run
 from elephant.tdnet.harvester import TDnetHarvester
 from elephant.ticker_registry import normalize_ticker
 from elephant.yjp.harvester import YahooFinanceHarvester
+from elephant.yjp_bbs_rank.harvester import BbsRankHarvester
 
 
 @dataclass
@@ -42,6 +43,8 @@ async def harvest_task(task: SourceHarvestTask, data_dir: str = DATA_DIR, regist
     try:
         if source.harvester == "tdnet":
             harvester = TDnetHarvester(store)
+        elif source.harvester == "yjp_bbs_rank":
+            harvester = BbsRankHarvester(store, TICKERS_FILE)
         elif source.harvester == "price":
             if not task.ticker:
                 raise ValueError("daily_prices harvest requires ticker")
