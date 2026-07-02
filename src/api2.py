@@ -19,6 +19,8 @@ from elephant.source.run_log import recent_runs
 from elephant.source.scheduler import create_daily_plan
 from elephant.source.scheduler_service import source_scheduler_service
 from elephant.ticker_registry import normalize_ticker
+from elephant.analysis.batch import run_daily_analysis
+from elephant.analysis.pipeline import analyze_ticker, load_latest_score, save_analysis
 
 
 @asynccontextmanager
@@ -42,6 +44,12 @@ app.add_middleware(
 class SourceCheckRequest(BaseModel):
     ticker: str
     source_id: str | None = None
+
+
+class AnalysisRequest(BaseModel):
+    ticker: str | None = None
+    limit: int | None = None
+    save: bool = True
 
 
 @app.get("/api2/sources")
@@ -122,6 +130,25 @@ def api2_source_scheduler_replan():
 @app.get("/api2/source-runs")
 def api2_source_runs(limit: int = 100):
     return recent_runs(limit=limit)
+
+
+@app.post("/api2/analysis/run")
+def api2_analysis_run(req: AnalysisRequest):
+    if req.ticker:
+        packet, aggregate = analyze_ticker(req.ticker)
+        if req.save:
+            save_analysis(packet, aggregate)
+        return {"packet": packet.to_dict(), "aggregate": aggregate.to_dict(), "saved": req.save}
+    result = run_daily_analysis(limit=req.limit)
+    return result.to_dict()
+
+
+@app.get("/api2/analysis/{ticker}/latest")
+def api2_analysis_latest(ticker: str):
+    result = load_latest_score(ticker)
+    if not result:
+        raise HTTPException(status_code=404, detail="No analysis score found")
+    return result
 
 
 if __name__ == "__main__":

@@ -7,6 +7,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 from elephant.analysis.aggregate import aggregate_signals
 from elephant.analysis.analyzers import analyze_minkabu_analyst_sentiment, analyze_minkabu_user_sentiment
+from elephant.analysis.batch import run_daily_analysis
 from elephant.analysis.catalog import list_data
 from elephant.analysis.models import AnalysisSignal
 
@@ -86,3 +87,29 @@ def test_aggregate_signals_converts_direction_to_0_100_score():
     assert aggregate.signal_count == 2
     assert aggregate.supporting_data_ids == ["daily_price_returns", "fool_quote_news"]
 
+
+def test_daily_analysis_batch_saves_each_ticker(monkeypatch):
+    calls = []
+
+    class Packet:
+        ticker = "SMCI"
+        signals = []
+
+    class Aggregate:
+        ticker = "SMCI"
+
+    def fake_analyze(ticker):
+        return Packet(), Aggregate()
+
+    def fake_save(packet, aggregate):
+        calls.append((packet.ticker, aggregate.ticker))
+
+    monkeypatch.setattr("elephant.analysis.batch.analyze_ticker", fake_analyze)
+    monkeypatch.setattr("elephant.analysis.batch.save_analysis", fake_save)
+
+    result = run_daily_analysis(tickers=["SMCI", "SMCI", "NVDA"], limit=1)
+
+    assert result.requested == 1
+    assert result.analyzed == 1
+    assert result.failed == 0
+    assert calls == [("SMCI", "SMCI")]

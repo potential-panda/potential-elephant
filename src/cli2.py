@@ -22,6 +22,7 @@ from elephant.source.tickers import known_tickers
 from elephant.ticker_registry import normalize_ticker
 from elephant.analysis.catalog import list_data
 from elephant.analysis.pipeline import analyze_ticker, save_analysis
+from elephant.analysis.batch import run_daily_analysis
 
 
 def sources_list_cmd(args):
@@ -192,6 +193,16 @@ def analysis_run_cmd(args):
         )
 
 
+def analysis_batch_cmd(args):
+    result = run_daily_analysis(limit=args.limit)
+    print(
+        f"analysis batch requested={result.requested} analyzed={result.analyzed} "
+        f"failed={result.failed} started={result.started_at} finished={result.finished_at}"
+    )
+    for error in result.errors:
+        print(f"  failed {error['ticker']}: {error['error']}")
+
+
 def main():
     parser = argparse.ArgumentParser(description="Potential Elephant v2 CLI")
     subparsers = parser.add_subparsers(dest="command")
@@ -235,6 +246,9 @@ def main():
     analysis_run.add_argument("--ticker", required=True)
     analysis_run.add_argument("--save", action="store_true", help="Save analysis signal/score datasets")
 
+    analysis_batch = analysis_subs.add_parser("batch", help="Analyze known tickers and save analysis datasets")
+    analysis_batch.add_argument("--limit", type=int, help="Limit number of tickers for testing")
+
     args = parser.parse_args()
     if args.command == "sources":
         if args.sources_cmd == "list":
@@ -258,6 +272,8 @@ def main():
             analysis_catalog_cmd(args)
         elif args.analysis_cmd == "run":
             analysis_run_cmd(args)
+        elif args.analysis_cmd == "batch":
+            analysis_batch_cmd(args)
         else:
             analysis.print_help()
     else:

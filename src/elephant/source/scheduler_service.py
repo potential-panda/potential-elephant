@@ -8,6 +8,7 @@ from datetime import datetime
 import schedule
 
 from elephant.config import SOURCE_REGISTRY_FILE
+from elephant.analysis.batch import run_daily_analysis
 from elephant.source.availability import check_sources
 from elephant.source.harvest import SourceHarvestTask, harvest_task
 from elephant.source.registry import SourceRegistry
@@ -38,6 +39,11 @@ class SourceSchedulerService:
         self._availability_completed = 0
         self._availability_failed = 0
         self._last_availability_check_at: str | None = None
+        self._analysis_submitted = 0
+        self._analysis_completed = 0
+        self._analysis_failed = 0
+        self._last_analysis_at: str | None = None
+        self._last_analysis_result: dict | None = None
 
     def start(self) -> bool:
         with self._lock:
@@ -81,6 +87,11 @@ class SourceSchedulerService:
                 "availability_completed": self._availability_completed,
                 "availability_failed": self._availability_failed,
                 "last_availability_check_at": self._last_availability_check_at,
+                "analysis_submitted": self._analysis_submitted,
+                "analysis_completed": self._analysis_completed,
+                "analysis_failed": self._analysis_failed,
+                "last_analysis_at": self._last_analysis_at,
+                "last_analysis_result": self._last_analysis_result,
                 "max_workers": self.max_workers,
                 "next_tasks": [
                     {
@@ -99,6 +110,7 @@ class SourceSchedulerService:
         self._plan_day()
         schedule.every().day.at("01:00").do(self._plan_day).tag("source-v2")
         schedule.every().sunday.at("03:00").do(self._submit_availability_check).tag("source-v2")
+        schedule.every().day.at("23:45").do(self._submit_analysis).tag("source-v2")
         while not self._stop_event.is_set():
             schedule.run_pending()
             time.sleep(1)
@@ -110,6 +122,7 @@ class SourceSchedulerService:
         schedule.clear("source-v2")
         schedule.every().day.at("01:00").do(self._plan_day).tag("source-v2")
         schedule.every().sunday.at("03:00").do(self._submit_availability_check).tag("source-v2")
+        schedule.every().day.at("23:45").do(self._submit_analysis).tag("source-v2")
         for task in tasks:
             schedule.every().day.at(task.scheduled_at.strftime("%H:%M")).do(self._submit_task, task=task).tag("source-v2")
         with self._lock:
@@ -146,6 +159,27 @@ class SourceSchedulerService:
             logging.exception("[api2 source scheduler] availability check failed")
             with self._lock:
                 self._availability_failed += 1
+
+    def _submit_analysis(self):
+        with self._lock:
+            executor = self._executor
+            self._analysis_submitted += 1
+        if not executor:
+            return schedule.CancelJob
+        executor.submit(self._run_analysis)
+        return schedule.CancelJob
+
+    def _run_analysis(self) -> None:
+        try:
+            result = run_daily_analysis()
+            with self._lock:
+                self._analysis_completed += 1
+                self._last_analysis_at = datetime.now().isoformat(timespec="seconds")
+                self._last_analysis_result = result.to_dict()
+        except Exception:
+            logging.exception("[api2 source scheduler] daily analysis failed")
+            with self._lock:
+                self._analysis_failed += 1
 
     def _run_task(self, task: SourceHarvestTask) -> None:
         try:
