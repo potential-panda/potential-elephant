@@ -10,6 +10,7 @@ from elephant.theme.apply import apply_river_suggestions
 from elephant.theme.catalog import get_theme_source, list_theme_sources
 from elephant.theme.harvest import harvest_theme_source
 from elephant.theme.io import import_etf_holdings_csv, import_theme_members_csv, load_river_suggestions, load_theme_source_themes
+from elephant.theme.io import write_dataset
 from elephant.river.tree import RiverTree
 
 
@@ -167,3 +168,81 @@ def test_apply_river_suggestions_requires_explicit_non_dry_run(tmp_path):
     assert len(nodes) == 1
     assert nodes[0][1].status == "proposed"
     assert nodes[0][1].source == "theme_discovery"
+
+
+def test_apply_river_suggestions_removes_low_score_theme_discovered_nodes(tmp_path):
+    tree_path = tmp_path / "river_tree.json"
+    tree = RiverTree(str(tree_path))
+    tree.add_river("physical_ai", "Physical AI")
+    tree.add_node("physical_ai", "6861.T", "upper", source="theme_discovery")
+    tree.add_node("physical_ai", "6506.T", "upper", source="manual")
+
+    write_dataset(
+        "ticker_theme_scores",
+        [
+            {
+                "id": "score-6861",
+                "ticker": "6861.T",
+                "theme_id": "physical_ai",
+                "river_id": "physical_ai",
+                "score": 12.0,
+                "evidence_count": 1,
+            },
+            {
+                "id": "score-6506",
+                "ticker": "6506.T",
+                "theme_id": "physical_ai",
+                "river_id": "physical_ai",
+                "score": 10.0,
+                "evidence_count": 1,
+            },
+        ],
+        str(tmp_path),
+        replace=True,
+    )
+
+    dry = apply_river_suggestions(data_dir=str(tmp_path), tree_path=str(tree_path), dry_run=True)
+    assert dry.removed == 0
+    assert any(change["action"] == "remove_node" and change["ticker"] == "6861.T" for change in dry.changes)
+    assert RiverTree(str(tree_path)).find_ticker("6861.T")
+
+    applied = apply_river_suggestions(data_dir=str(tmp_path), tree_path=str(tree_path), dry_run=False)
+    updated = RiverTree(str(tree_path))
+
+    assert applied.removed == 1
+    assert updated.find_ticker("6861.T") == []
+    assert updated.find_ticker("6506.T")
+
+
+def test_apply_river_suggestions_keeps_human_reviewed_theme_nodes(tmp_path):
+    tree_path = tmp_path / "river_tree.json"
+    tree = RiverTree(str(tree_path))
+    tree.add_river("physical_ai", "Physical AI")
+    tree.add_node("physical_ai", "6861.T", "upper", source="theme_discovery")
+    tree.update_node(
+        "physical_ai",
+        "6861.T",
+        last_human_decision="keep",
+        last_human_decision_date="2026-07-25",
+    )
+
+    write_dataset(
+        "ticker_theme_scores",
+        [
+            {
+                "id": "score-6861",
+                "ticker": "6861.T",
+                "theme_id": "physical_ai",
+                "river_id": "physical_ai",
+                "score": 0.0,
+                "evidence_count": 0,
+            }
+        ],
+        str(tmp_path),
+        replace=True,
+    )
+
+    result = apply_river_suggestions(data_dir=str(tmp_path), tree_path=str(tree_path), dry_run=False)
+
+    assert result.removed == 0
+    assert RiverTree(str(tree_path)).find_ticker("6861.T")

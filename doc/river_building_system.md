@@ -237,8 +237,19 @@ Weekly offline run:
 4. Compute ticker similarity and peer candidates.
 5. Compare suggestions with `river_tree.json`.
 6. Write `river_suggestions`.
-7. Review suggestions in UI or CLI.
-8. Human accepts, rejects, or watches. Accepted suggestions update the tree.
+7. Apply maintenance in dry-run mode.
+8. Review additions and removals in UI or CLI.
+9. Apply accepted changes to the tree.
+
+Maintenance does two things:
+
+- add high-score proposed nodes
+- remove low-score nodes that were originally added by `source=theme_discovery`
+
+Removal is intentionally conservative. It does not remove manual nodes, and it
+does not remove theme-discovered nodes with a recorded human decision. If the
+latest score dataset is missing, removal is skipped rather than treating every
+node as zero score.
 
 ## Commands
 
@@ -280,6 +291,20 @@ Preview and apply high-confidence suggestions:
 ```bash
 PYTHONPATH=src python src/cli2.py themes apply --min-score 30 --dry-run
 PYTHONPATH=src python src/cli2.py themes apply --min-score 30
+```
+
+By default, the same command also removes low-score theme-discovered nodes whose
+latest ticker-theme score is below `28`:
+
+```bash
+PYTHONPATH=src python src/cli2.py themes apply --min-score 30 --remove-min-score 28 --dry-run
+PYTHONPATH=src python src/cli2.py themes apply --min-score 30 --remove-min-score 28
+```
+
+Skip removal for an add-only maintenance pass:
+
+```bash
+PYTHONPATH=src python src/cli2.py themes apply --keep-low-score
 ```
 
 Apply one explicitly reviewed suggestion:

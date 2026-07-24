@@ -292,16 +292,26 @@ def themes_suggestions_cmd(args):
 def themes_apply_cmd(args):
     result = apply_river_suggestions(
         min_score=args.min_score,
+        remove_min_score=args.remove_min_score,
+        remove_low_score=not args.keep_low_score,
         suggestion_id=args.suggestion_id,
         dry_run=args.dry_run,
     )
     mode = "dry-run" if result.dry_run else "applied"
-    print(f"theme apply {mode} evaluated={result.evaluated} applied={result.applied} skipped={result.skipped}")
+    print(
+        f"theme apply {mode} evaluated={result.evaluated} applied={result.applied} "
+        f"removed={result.removed} skipped={result.skipped}"
+    )
     for change in result.changes[: args.limit]:
         if change["action"] == "add_node":
             print(
                 f"  add {change['ticker']} -> {change['river_id']}[{change['layer']}] "
                 f"score={change['score']:.2f} confidence={change['confidence']}"
+            )
+        elif change["action"] == "remove_node":
+            print(
+                f"  remove {change['ticker']} from {change['river_id']} "
+                f"score={change['score']:.2f} reason={change['reason']}"
             )
         else:
             print(f"  skip {change.get('ticker','')} reason={change.get('reason','')}")
@@ -383,6 +393,12 @@ def main():
 
     theme_apply = theme_subs.add_parser("apply", help="Apply saved river suggestions to river_tree.json")
     theme_apply.add_argument("--min-score", type=float, default=30.0)
+    theme_apply.add_argument("--remove-min-score", type=float, default=28.0)
+    theme_apply.add_argument(
+        "--keep-low-score",
+        action="store_true",
+        help="Do not remove theme-discovered tree nodes whose latest score is below remove-min-score",
+    )
     theme_apply.add_argument("--suggestion-id")
     theme_apply.add_argument("--dry-run", action="store_true", help="Preview changes without editing the tree")
     theme_apply.add_argument("--limit", type=int, default=50, help="Limit printed changes")

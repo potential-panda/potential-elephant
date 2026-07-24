@@ -52,10 +52,18 @@ def harvest_sources(source_id: str | None = None) -> dict:
     return {"items": items, "total": len(items)}
 
 
-def apply_suggestions(min_score: float = 30.0, suggestion_id: str | None = None, dry_run: bool = True) -> dict:
+def apply_suggestions(
+    min_score: float = 30.0,
+    remove_min_score: float = 28.0,
+    remove_low_score: bool = True,
+    suggestion_id: str | None = None,
+    dry_run: bool = True,
+) -> dict:
     return apply_river_suggestions(
         data_dir=DATA_DIR,
         min_score=min_score,
+        remove_min_score=remove_min_score,
+        remove_low_score=remove_low_score,
         suggestion_id=suggestion_id,
         dry_run=dry_run,
     ).to_dict()
