@@ -32,6 +32,7 @@ from elephant.ticker_registry import is_jp_ticker, load_cache, load_us_tickers
 from elephant.ticker_registry import normalize_ticker
 from elephant.analysis.batch import run_daily_analysis
 from elephant.api import datasets
+from elephant.api import themes as theme_api
 from elephant.api.prices import get_price_changes
 from elephant.analysis.pipeline import analyze_ticker, load_latest_score, save_analysis
 
@@ -106,6 +107,20 @@ class AnalysisRequest(BaseModel):
     ticker: str | None = None
     limit: int | None = None
     save: bool = True
+
+
+class ThemeBuildRequest(BaseModel):
+    save: bool = True
+
+
+class ThemeHarvestRequest(BaseModel):
+    source_id: str | None = None
+
+
+class ThemeApplyRequest(BaseModel):
+    min_score: float = 30.0
+    suggestion_id: str | None = None
+    dry_run: bool = True
 
 
 class DecisionRequest(BaseModel):
@@ -394,6 +409,48 @@ def api2_analysis_latest(ticker: str):
     if not result:
         raise HTTPException(status_code=404, detail="No analysis score found")
     return result
+
+
+@app.get("/api2/themes/scores")
+def api2_theme_scores(limit: int = Query(100, ge=1, le=1000)):
+    return theme_api.get_theme_scores(limit=limit)
+
+
+@app.get("/api2/themes/source-themes")
+def api2_theme_source_themes(limit: int = Query(100, ge=1, le=1000)):
+    return theme_api.get_source_themes(limit=limit)
+
+
+@app.get("/api2/themes/river-suggestions")
+def api2_river_suggestions(
+    limit: int = Query(100, ge=1, le=1000),
+    include_existing: bool = Query(True),
+):
+    return theme_api.get_river_suggestions(limit=limit, include_existing=include_existing)
+
+
+@app.post("/api2/themes/build")
+def api2_themes_build(req: ThemeBuildRequest):
+    return theme_api.build_themes(save=req.save)
+
+
+@app.get("/api2/themes/sources")
+def api2_theme_sources():
+    return theme_api.get_theme_sources()
+
+
+@app.post("/api2/themes/harvest-sources")
+def api2_theme_harvest_sources(req: ThemeHarvestRequest):
+    return theme_api.harvest_sources(source_id=req.source_id)
+
+
+@app.post("/api2/themes/apply")
+def api2_theme_apply(req: ThemeApplyRequest):
+    return theme_api.apply_suggestions(
+        min_score=req.min_score,
+        suggestion_id=req.suggestion_id,
+        dry_run=req.dry_run,
+    )
 
 
 # --- Serve frontend ---

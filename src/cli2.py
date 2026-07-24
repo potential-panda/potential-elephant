@@ -23,6 +23,11 @@ from elephant.ticker_registry import normalize_ticker
 from elephant.analysis.catalog import list_data
 from elephant.analysis.pipeline import analyze_ticker, save_analysis
 from elephant.analysis.batch import run_daily_analysis
+from elephant.theme.apply import apply_river_suggestions
+from elephant.theme.builder import build_theme_river_system
+from elephant.theme.catalog import list_theme_sources
+from elephant.theme.harvest import harvest_theme_sources
+from elephant.theme.io import import_etf_holdings_csv, import_theme_members_csv, load_river_suggestions, load_theme_source_themes, load_ticker_theme_scores
 
 
 def sources_list_cmd(args):
@@ -203,6 +208,105 @@ def analysis_batch_cmd(args):
         print(f"  failed {error['ticker']}: {error['error']}")
 
 
+def themes_import_members_cmd(args):
+    rows = import_theme_members_csv(args.csv)
+    print(f"Imported {rows} theme member rows")
+
+
+def themes_sources_cmd(args):
+    sources = list_theme_sources(enabled_only=not args.all)
+    for source in sources:
+        url = source.url or "-"
+        print(
+            f"{source.source_id:<22} {source.kind:<12} {source.theme_id:<24} "
+            f"extractor={source.extractor:<18} url={url}"
+        )
+
+
+def themes_harvest_sources_cmd(args):
+    results = harvest_theme_sources(source_id=args.source)
+    for result in results:
+        print(
+            f"{result['source_id']:<22} {result['kind']:<12} "
+            f"dataset={result['dataset']:<14} rows={result['rows']}"
+        )
+
+
+def themes_import_etf_cmd(args):
+    rows = import_etf_holdings_csv(args.csv)
+    print(f"Imported {rows} ETF holding rows")
+
+
+def themes_build_cmd(args):
+    result = build_theme_river_system(save=args.save)
+    print(
+        f"theme build score_rows={result.score_rows} suggestion_rows={result.suggestion_rows} "
+        f"generated_at={result.generated_at}"
+    )
+
+
+def themes_scores_cmd(args):
+    df = load_ticker_theme_scores()
+    if df.empty:
+        print("No ticker theme scores found. Run `themes build --save` first.")
+        return
+    df = df.sort_values(["score", "evidence_count"], ascending=[False, False]).head(args.limit)
+    for _, row in df.iterrows():
+        print(
+            f"{row.get('ticker',''):<10} {row.get('theme_id',''):<26} "
+            f"score={float(row.get('score') or 0):>6.2f} evidence={int(row.get('evidence_count') or 0):<3} "
+            f"river={row.get('river_id','')}"
+        )
+
+
+def themes_source_themes_cmd(args):
+    df = load_theme_source_themes()
+    if df.empty:
+        print("No raw source themes found. Run `themes harvest-sources` first.")
+        return
+    df = df.sort_values(["source_id", "rank"], ascending=[True, True]).head(args.limit)
+    for _, row in df.iterrows():
+        print(
+            f"{row.get('source_id',''):<24} rank={int(row.get('rank') or 0):<3} "
+            f"canonical={row.get('canonical_theme_id','') or '-':<26} "
+            f"theme={row.get('source_theme_name','')}"
+        )
+
+
+def themes_suggestions_cmd(args):
+    df = load_river_suggestions()
+    if df.empty:
+        print("No river suggestions found. Run `themes build --save` first.")
+        return
+    if not args.include_existing and "status" in df.columns:
+        df = df[df["status"] != "existing"]
+    df = df.sort_values(["score"], ascending=False).head(args.limit)
+    for _, row in df.iterrows():
+        print(
+            f"{row.get('ticker',''):<10} {row.get('status',''):<9} {row.get('river_id',''):<14} "
+            f"{row.get('layer',''):<7} score={float(row.get('score') or 0):>6.2f} "
+            f"theme={row.get('theme_id','')}"
+        )
+
+
+def themes_apply_cmd(args):
+    result = apply_river_suggestions(
+        min_score=args.min_score,
+        suggestion_id=args.suggestion_id,
+        dry_run=args.dry_run,
+    )
+    mode = "dry-run" if result.dry_run else "applied"
+    print(f"theme apply {mode} evaluated={result.evaluated} applied={result.applied} skipped={result.skipped}")
+    for change in result.changes[: args.limit]:
+        if change["action"] == "add_node":
+            print(
+                f"  add {change['ticker']} -> {change['river_id']}[{change['layer']}] "
+                f"score={change['score']:.2f} confidence={change['confidence']}"
+            )
+        else:
+            print(f"  skip {change.get('ticker','')} reason={change.get('reason','')}")
+
+
 def main():
     parser = argparse.ArgumentParser(description="Potential Elephant v2 CLI")
     subparsers = parser.add_subparsers(dest="command")
@@ -212,6 +316,9 @@ def main():
 
     analysis = subparsers.add_parser("analysis", help="Analysis component commands")
     analysis_subs = analysis.add_subparsers(dest="analysis_cmd")
+
+    themes = subparsers.add_parser("themes", help="Build theme evidence and river suggestions")
+    theme_subs = themes.add_subparsers(dest="themes_cmd")
 
     list_parser = source_subs.add_parser("list", help="List source catalog")
     list_parser.add_argument("--scope", choices=["market", "ticker"])
@@ -249,6 +356,37 @@ def main():
     analysis_batch = analysis_subs.add_parser("batch", help="Analyze known tickers and save analysis datasets")
     analysis_batch.add_argument("--limit", type=int, help="Limit number of tickers for testing")
 
+    theme_members = theme_subs.add_parser("import-members", help="Import theme member CSV")
+    theme_members.add_argument("--csv", required=True)
+
+    theme_etf = theme_subs.add_parser("import-etf", help="Import ETF holdings CSV")
+    theme_etf.add_argument("--csv", required=True)
+
+    theme_sources = theme_subs.add_parser("sources", help="List configured theme/ETF source links")
+    theme_sources.add_argument("--all", action="store_true", help="Include disabled sources")
+
+    theme_harvest_sources = theme_subs.add_parser("harvest-sources", help="Harvest configured source links")
+    theme_harvest_sources.add_argument("--source", help="Harvest one source_id")
+
+    theme_build = theme_subs.add_parser("build", help="Build ticker-theme scores and river suggestions")
+    theme_build.add_argument("--save", action="store_true", help="Save output datasets")
+
+    theme_scores = theme_subs.add_parser("scores", help="Show latest ticker-theme scores")
+    theme_scores.add_argument("--limit", type=int, default=50)
+
+    theme_source_themes = theme_subs.add_parser("source-themes", help="Show latest raw source themes")
+    theme_source_themes.add_argument("--limit", type=int, default=50)
+
+    theme_suggestions = theme_subs.add_parser("suggestions", help="Show latest river suggestions")
+    theme_suggestions.add_argument("--limit", type=int, default=50)
+    theme_suggestions.add_argument("--include-existing", action="store_true")
+
+    theme_apply = theme_subs.add_parser("apply", help="Apply saved river suggestions to river_tree.json")
+    theme_apply.add_argument("--min-score", type=float, default=30.0)
+    theme_apply.add_argument("--suggestion-id")
+    theme_apply.add_argument("--dry-run", action="store_true", help="Preview changes without editing the tree")
+    theme_apply.add_argument("--limit", type=int, default=50, help="Limit printed changes")
+
     args = parser.parse_args()
     if args.command == "sources":
         if args.sources_cmd == "list":
@@ -276,6 +414,27 @@ def main():
             analysis_batch_cmd(args)
         else:
             analysis.print_help()
+    elif args.command == "themes":
+        if args.themes_cmd == "import-members":
+            themes_import_members_cmd(args)
+        elif args.themes_cmd == "import-etf":
+            themes_import_etf_cmd(args)
+        elif args.themes_cmd == "sources":
+            themes_sources_cmd(args)
+        elif args.themes_cmd == "harvest-sources":
+            themes_harvest_sources_cmd(args)
+        elif args.themes_cmd == "build":
+            themes_build_cmd(args)
+        elif args.themes_cmd == "scores":
+            themes_scores_cmd(args)
+        elif args.themes_cmd == "source-themes":
+            themes_source_themes_cmd(args)
+        elif args.themes_cmd == "suggestions":
+            themes_suggestions_cmd(args)
+        elif args.themes_cmd == "apply":
+            themes_apply_cmd(args)
+        else:
+            themes.print_help()
     else:
         parser.print_help()
 
