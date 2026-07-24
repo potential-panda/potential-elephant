@@ -52,7 +52,7 @@ async def harvest_task(task: SourceHarvestTask, data_dir: str = DATA_DIR, regist
         elif source.harvester == "yahoo_jp_bbs":
             if not task.ticker or not task.url:
                 raise ValueError("yahoo_jp_bbs harvest requires ticker and url")
-            harvester = YahooFinanceHarvester(store, task.ticker)
+            harvester = YahooFinanceHarvester(store, task.ticker, tickers_file=TICKERS_FILE)
             args["source_url"] = task.url
         elif source.harvester == "minkabu":
             if not task.ticker or not task.url:
@@ -93,9 +93,10 @@ def tasks_for_ticker(ticker: str, registry: SourceRegistry | None = None) -> lis
     registry = registry or SourceRegistry()
     canonical = normalize_ticker(str(ticker).strip().upper())
     tasks = []
+    resolved_sources = registry.resolved_sources(canonical)
     for source in list_sources(scope="ticker"):
         if source.availability_check_required:
-            record = registry.get_source(canonical, source.source_id)
+            record = resolved_sources.get(source.source_id)
             if not record or record.get("status") != "available" or not record.get("urls"):
                 continue
             tasks.append(SourceHarvestTask(source.source_id, "ticker", datetime.now(), canonical, record["urls"][0]))

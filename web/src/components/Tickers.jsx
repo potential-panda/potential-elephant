@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { getSourceDefinitions, getTickersOverview } from '../api'
+import { appHashHref } from '../app-base'
 import StorageFooter from './StorageFooter'
 
 function Spinner() {
@@ -105,11 +106,10 @@ function TickerTable({ items, market, defs }) {
           return row.ticker ?? ''
         case 'last_seen':
           return row.last_seen ?? ''
-        case 'last_scraped':
-          return row.last_scraped_at ?? ''
+        case 'last_updated':
+          return row.last_updated_at ?? ''
         case 'speed': {
-          const h = row.speed_history || []
-          return h.length > 0 ? h[h.length - 1].comments_per_hour : -1
+          return row.speed_latest ?? -1
         }
         case 'sources':
           return sourceCount(row, defs)
@@ -129,7 +129,7 @@ function TickerTable({ items, market, defs }) {
     ? [
         { id: 'ticker', label: 'Ticker' },
         { id: 'sources', label: 'Sources' },
-        { id: 'last_scraped', label: 'Last Scraped' },
+        { id: 'last_updated', label: 'Last Updated' },
         { id: 'speed', label: 'Speed' },
         { id: 'rank', label: 'Rank' },
         { id: 'last_seen', label: 'Last Seen' },
@@ -137,13 +137,13 @@ function TickerTable({ items, market, defs }) {
     : [
         { id: 'ticker', label: 'Ticker' },
         { id: 'sources', label: 'Sources' },
-        { id: 'last_scraped', label: 'Last Scraped' },
+        { id: 'last_updated', label: 'Last Updated' },
         { id: 'speed', label: 'Speed' },
       ]
 
   return (
-    <div className="bg-slate-900 border border-slate-800 rounded-lg overflow-hidden">
-      <table className="w-full text-sm">
+    <div className="bg-slate-900 border border-slate-800 rounded-lg overflow-x-auto">
+      <table className="w-full min-w-max text-sm">
         <thead>
           <tr className="border-b border-slate-800 text-slate-500 text-xs uppercase tracking-wider">
             {cols.map((col) => (
@@ -177,7 +177,7 @@ function TickerTable({ items, market, defs }) {
                 <td className="px-4 py-2.5">
                   <div className="flex flex-col">
                     <a
-                      href={`/#/detail/${row.ticker}`}
+                      href={appHashHref(`/detail/${encodeURIComponent(row.ticker)}`)}
                       className="text-emerald-400 hover:text-emerald-300 hover:underline font-semibold font-mono"
                     >
                       {row.ticker}
@@ -193,13 +193,13 @@ function TickerTable({ items, market, defs }) {
                     <SourceBadges row={row} defs={defs} />
                   </div>
                 </td>
-                <td className="px-4 py-2.5 text-slate-400 font-mono text-xs whitespace-nowrap">
-                  {fmtScraped(row.last_scraped_at)}
+                <td className="px-4 py-2.5 text-slate-400 font-mono text-xs whitespace-nowrap" title={row.last_updated_source || ''}>
+                  {fmtScraped(row.last_updated_at)}
                 </td>
                 <td className="px-4 py-2.5">
-                  {row.speed_history && row.speed_history.length > 0 ? (
+                  {row.speed_latest != null ? (
                     <span className="text-slate-300 font-mono text-xs">
-                      {row.speed_history[row.speed_history.length - 1].comments_per_hour.toFixed(1)}{' '}
+                      {row.speed_latest.toFixed(1)}{' '}
                       <span className="text-slate-600">c/h</span>
                     </span>
                   ) : (

@@ -184,7 +184,7 @@ def api_watchlist():
     from datetime import date as _date
     from elephant.api.prices import get_price_changes
 
-    flagged = [d for d in _decisions.list_all() if d.get("decision") == "river_candidate"]
+    flagged = [d for d in _decisions.list_all() if d.get("decision") in {"river_candidate", "watch"}]
     if not flagged:
         return []
 

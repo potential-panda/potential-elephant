@@ -367,7 +367,7 @@ def tree_cmd(args):
 
     elif args.tree_cmd == "init":
         existing_rivers = {r.id for r in tree.list_rivers()}
-        added_rivers, added_nodes = [], []
+        added_rivers, added_nodes, updated_nodes = [], [], []
 
         for r in FRAMEWORK_RIVERS:
             if r["id"] not in existing_rivers:
@@ -388,16 +388,39 @@ def tree_cmd(args):
                             market=node.get("market", "US"),
                             role=node.get("role", ""),
                             source="seed",
+                            peer_group=node.get("peer_group", ""),
+                            causal_edge=node.get("causal_edge", ""),
+                            behind_reason=node.get("behind_reason", ""),
+                            competitor_tickers=node.get("competitor_tickers", []),
+                            leader_tickers=node.get("leader_tickers", []),
                         )
                         added_nodes.append(f"{node['ticker']} ({r['id']})")
                     except ValueError:
                         pass  # already exists
+                else:
+                    existing_node = next((n for n in river_obj.nodes if n.ticker == node["ticker"]), None)
+                    metadata = {
+                        "peer_group": node.get("peer_group", ""),
+                        "causal_edge": node.get("causal_edge", ""),
+                        "behind_reason": node.get("behind_reason", ""),
+                        "competitor_tickers": node.get("competitor_tickers", []),
+                        "leader_tickers": node.get("leader_tickers", []),
+                    }
+                    missing_metadata = {
+                        key: value
+                        for key, value in metadata.items()
+                        if value and existing_node is not None and not getattr(existing_node, key, None)
+                    }
+                    if missing_metadata and tree.update_node(r["id"], node["ticker"], **missing_metadata):
+                        updated_nodes.append(f"{node['ticker']} ({r['id']})")
 
         if added_rivers:
             print(f"Added rivers: {', '.join(added_rivers)}")
         if added_nodes:
             print(f"Added {len(added_nodes)} nodes from V1 ticker matrix")
-        if not added_rivers and not added_nodes:
+        if updated_nodes:
+            print(f"Updated {len(updated_nodes)} existing nodes with peer metadata")
+        if not added_rivers and not added_nodes and not updated_nodes:
             print("River tree already up to date.")
         print(tree.to_display())
 
@@ -424,6 +447,11 @@ def tree_cmd(args):
                 market=getattr(args, "market", "US") or "US",
                 role=getattr(args, "role", "") or "",
                 notes=getattr(args, "notes", "") or "",
+                peer_group=getattr(args, "peer_group", "") or "",
+                causal_edge=getattr(args, "causal_edge", "") or "",
+                behind_reason=getattr(args, "behind_reason", "") or "",
+                competitor_tickers=_csv_arg(getattr(args, "competitor_tickers", "")),
+                leader_tickers=_csv_arg(getattr(args, "leader_tickers", "")),
             )
             print(f"Added node: {node.ticker} [{node.layer}] to river '{args.river}'")
         except ValueError as e:
@@ -431,8 +459,14 @@ def tree_cmd(args):
 
     elif args.tree_cmd == "node-update":
         kwargs = {
-            k: v for k, v in vars(args).items() if k in ("layer", "name", "market", "role", "notes") and v is not None
+            k: v for k, v in vars(args).items()
+            if k in ("layer", "name", "market", "role", "notes", "peer_group", "causal_edge", "behind_reason")
+            and v is not None
         }
+        if getattr(args, "competitor_tickers", None) is not None:
+            kwargs["competitor_tickers"] = _csv_arg(args.competitor_tickers)
+        if getattr(args, "leader_tickers", None) is not None:
+            kwargs["leader_tickers"] = _csv_arg(args.leader_tickers)
         if tree.update_node(args.river, args.ticker, **kwargs):
             print(f"Updated {args.ticker} in river '{args.river}'")
         else:
@@ -540,6 +574,12 @@ def _auto_add(tree: RiverTree, result: dict) -> None:
         print(f"  -> Added {node.ticker} [{node.layer}] to river '{result['river_id']}'")
     except ValueError as e:
         print(f"  -> Could not add: {e}")
+
+
+def _csv_arg(value: str | None) -> list[str]:
+    if not value:
+        return []
+    return [item.strip().upper() for item in value.split(",") if item.strip()]
 
 
 # --- decision ---
@@ -770,6 +810,11 @@ def main():
     node_add.add_argument("--market", default="US", choices=["US", "JP"])
     node_add.add_argument("--role", default="")
     node_add.add_argument("--notes", default="")
+    node_add.add_argument("--peer-group", default="", dest="peer_group")
+    node_add.add_argument("--causal-edge", default="", dest="causal_edge")
+    node_add.add_argument("--behind-reason", default="", dest="behind_reason")
+    node_add.add_argument("--competitor-tickers", default="", dest="competitor_tickers")
+    node_add.add_argument("--leader-tickers", default="", dest="leader_tickers")
 
     node_upd = tree_subs.add_parser("node-update", help="Update a node")
     node_upd.add_argument("--river", required=True)
@@ -779,6 +824,11 @@ def main():
     node_upd.add_argument("--market", choices=["US", "JP"])
     node_upd.add_argument("--role")
     node_upd.add_argument("--notes")
+    node_upd.add_argument("--peer-group", dest="peer_group")
+    node_upd.add_argument("--causal-edge", dest="causal_edge")
+    node_upd.add_argument("--behind-reason", dest="behind_reason")
+    node_upd.add_argument("--competitor-tickers", dest="competitor_tickers")
+    node_upd.add_argument("--leader-tickers", dest="leader_tickers")
 
     node_rm = tree_subs.add_parser("node-remove", help="Remove a node")
     node_rm.add_argument("--river", required=True)

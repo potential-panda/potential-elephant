@@ -37,6 +37,6 @@ def test_market_for_ticker_uses_canonical_suffix():
 
 def test_source_adapters_resolve_source_specific_symbols():
     assert MinkabuAdapter().url_for("7203.T") == ("7203", "https://minkabu.jp/stock/7203")
-    assert MinkabuAdapter().url_for("SMCI") == ("SMCI", "https://us.minkabu.jp/stock/SMCI")
+    assert MinkabuAdapter().url_for("SMCI") == ("SMCI", "https://us.minkabu.jp/stocks/SMCI")
     assert YahooJpBbsAdapter().url_for("7203.T") == ("7203.T", "https://finance.yahoo.co.jp/quote/7203.T/forum")
     assert FoolQuoteNewsAdapter().urls_for("SMCI")[0] == "https://www.fool.com/quote/nasdaq/smci/"

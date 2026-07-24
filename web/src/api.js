@@ -27,6 +27,7 @@ async function api2Fetch(path, options = {}) {
 export const getTickers = () => apiFetch('/tickers')
 export const getTickersV2 = () => api2Fetch('/tickers')
 export const getTickersOverview = () => api2Fetch('/tickers/overview')
+export const getCandidatesV2 = () => api2Fetch('/candidates')
 export const getDetail = (ticker) => api2Fetch(`/detail/${encodeURIComponent(ticker)}`)
 
 export const getDigestLatest = () => apiFetch('/digest/latest')
@@ -51,6 +52,11 @@ export const startDiveV2 = (ticker) =>
   api2Fetch('/dive', { method: 'POST', body: JSON.stringify({ ticker }) })
 export const listDives = () => apiFetch('/dive/list')
 export const getDiveLatest = (ticker) => apiFetch(`/dive/${ticker}/latest`)
+export const recordDecision = ({ ticker, decision, reason = '', snapshot = {}, what_would_change = '', suppress_days = 30 }) =>
+  apiFetch('/decisions', {
+    method: 'POST',
+    body: JSON.stringify({ ticker, decision, reason, snapshot, what_would_change, suppress_days }),
+  })
 
 export const getJob = (jobId) => apiFetch(`/jobs/${jobId}`)
 export const getJobV2 = (jobId) => api2Fetch(`/jobs/${jobId}`)
@@ -59,6 +65,14 @@ export const getPriceChanges = (tickers) =>
   api2Fetch(`/prices?tickers=${encodeURIComponent(tickers.join(','))}`)
 
 export const getStats = () => api2Fetch('/stats')
+export const getWatchlistV2 = () => api2Fetch('/watchlist')
+export const recordDecisionV2 = ({ ticker, decision, reason = '', snapshot = {}, what_would_change = '', suppress_days = 30 }) =>
+  api2Fetch('/decisions', {
+    method: 'POST',
+    body: JSON.stringify({ ticker, decision, reason, snapshot, what_would_change, suppress_days }),
+  })
+export const removeDecisionV2 = (ticker) =>
+  api2Fetch(`/decisions/${encodeURIComponent(ticker)}`, { method: 'DELETE' })
 
 
 export const queryDataset = ({ dataset, ticker, keyword, limit = 50 }) => {

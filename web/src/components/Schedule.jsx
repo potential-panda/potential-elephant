@@ -136,8 +136,8 @@ export default function Schedule() {
         {sortedPlan.length === 0 ? (
           <p className="text-slate-600 text-sm">No tasks scheduled.</p>
         ) : (
-          <div className="bg-slate-900 border border-slate-800 rounded-lg overflow-hidden">
-            <table className="w-full text-sm">
+          <div className="bg-slate-900 border border-slate-800 rounded-lg overflow-x-auto">
+            <table className="w-full min-w-max text-sm">
               <thead>
                 <tr className="border-b border-slate-800 text-xs text-slate-500 uppercase tracking-wider">
                   <th className="text-left px-4 py-3 w-36">Time</th>
@@ -179,8 +179,8 @@ export default function Schedule() {
           <h3 className="text-sm font-medium text-slate-400 mb-3 uppercase tracking-wider">
             Upcoming Tasks
           </h3>
-          <div className="bg-slate-900 border border-slate-800 rounded-lg overflow-hidden">
-            <table className="w-full text-sm">
+          <div className="bg-slate-900 border border-slate-800 rounded-lg overflow-x-auto">
+            <table className="w-full min-w-max text-sm">
               <thead>
                 <tr className="border-b border-slate-800 text-xs text-slate-500 uppercase tracking-wider">
                   <th className="text-left px-4 py-3 w-36">Time</th>

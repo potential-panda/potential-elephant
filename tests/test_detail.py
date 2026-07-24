@@ -6,6 +6,7 @@ import pandas as pd
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 from elephant.api.detail import _sort_comments
+from elephant.api.detail_v2 import _infer_source_from_loaded_data
 
 
 def test_sort_comments_uses_post_datetime_descending():
@@ -28,3 +29,22 @@ def test_sort_comments_uses_post_datetime_descending():
 
     assert sorted_df.iloc[0]["post_id"] == "20"
     assert sorted_df.iloc[1]["post_id"] == "10"
+
+
+def test_detail_infers_fool_source_from_loaded_news_rows():
+    source = _infer_source_from_loaded_data(
+        "OKLO",
+        "fool_quote_news",
+        [
+            {
+                "source": "fool_us_quote_news",
+                "ticker": "OKLO",
+                "quote_url": "https://www.fool.com/quote/nyse/oklo/",
+                "scraped_at": "2026-07-19T16:14:00",
+            }
+        ],
+    )
+
+    assert source["status"] == "available"
+    assert source["urls"] == ["https://www.fool.com/quote/nyse/oklo/"]
+    assert source["last_row_count"] == 1

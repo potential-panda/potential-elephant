@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { APP_BASE } from '../app-base'
+import { getWatchlistV2, removeDecisionV2 } from '../api'
 import TickerLink from './TickerLink'
 
 function pct(v, opts = {}) {
@@ -182,11 +182,7 @@ export default function Watchlist() {
   const load = () => {
     setLoading(true)
     setError(null)
-    fetch(`${APP_BASE}/api/watchlist`)
-      .then(r => {
-        if (!r.ok) throw new Error(`${r.status} ${r.statusText}`)
-        return r.json()
-      })
+    getWatchlistV2()
       .then(rows => {
         if (!Array.isArray(rows)) throw new Error('unexpected response')
         setData(rows)
@@ -198,7 +194,7 @@ export default function Watchlist() {
   useEffect(() => { load() }, [])
 
   const handleRemove = (ticker) => {
-    fetch(`${APP_BASE}/api/decisions/${ticker}`, { method: 'DELETE' })
+    removeDecisionV2(ticker)
       .then(() => load())
       .catch(() => load())
   }

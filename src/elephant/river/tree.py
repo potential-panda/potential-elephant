@@ -69,6 +69,11 @@ class Node:
     last_human_decision_date: str = ""
     evidence_refs: list = field(default_factory=list)
     primary_river: bool = True
+    peer_group: str = ""
+    causal_edge: str = ""
+    behind_reason: str = ""
+    competitor_tickers: list[str] = field(default_factory=list)
+    leader_tickers: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -122,6 +127,11 @@ class RiverTree:
         role: str = "",
         notes: str = "",
         source: str = "manual",
+        peer_group: str = "",
+        causal_edge: str = "",
+        behind_reason: str = "",
+        competitor_tickers: list[str] | None = None,
+        leader_tickers: list[str] | None = None,
     ) -> Node:
         river = self._rivers.get(river_id)
         if not river:
@@ -139,6 +149,11 @@ class RiverTree:
             notes=notes,
             added=datetime.now().strftime("%Y-%m-%d"),
             source=source,
+            peer_group=peer_group,
+            causal_edge=causal_edge,
+            behind_reason=behind_reason,
+            competitor_tickers=competitor_tickers or [],
+            leader_tickers=leader_tickers or [],
         )
         river.nodes.append(node)
         self.save()
@@ -225,6 +240,11 @@ class RiverTree:
                         last_human_decision_date=n.get("last_human_decision_date", ""),
                         evidence_refs=n.get("evidence_refs", []),
                         primary_river=n.get("primary_river", True),
+                        peer_group=n.get("peer_group", ""),
+                        causal_edge=n.get("causal_edge", ""),
+                        behind_reason=n.get("behind_reason", ""),
+                        competitor_tickers=n.get("competitor_tickers", []),
+                        leader_tickers=n.get("leader_tickers", []),
                     )
                     for n in r.get("nodes", [])
                 ]
@@ -297,6 +317,10 @@ class RiverTree:
                             lines.append(f"      {node.role}")
                         if node.notes:
                             lines.append(f"      note: {node.notes}")
+                        if node.peer_group:
+                            lines.append(f"      peer group: {node.peer_group}")
+                        if node.causal_edge:
+                            lines.append(f"      edge: {node.causal_edge}")
                 else:
                     lines.append(f"  [{layer.upper()}] {label}  (empty)")
 

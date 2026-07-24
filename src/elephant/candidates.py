@@ -19,6 +19,7 @@ import json
 import logging
 import math
 import os
+from statistics import median
 from datetime import datetime, timedelta
 from typing import Optional
 
@@ -59,6 +60,90 @@ def _safe_float(value, default: float = 0.0) -> float:
     except (TypeError, ValueError):
         return default
     return result if math.isfinite(result) else default
+
+
+def _priority_signal_families(
+    *,
+    river_id: Optional[str],
+    bbs_rank: Optional[int],
+    speed_latest: Optional[float],
+    bull_pct: Optional[float],
+    bear_pct: Optional[float],
+    has_tdnet: bool,
+    has_minkabu: bool,
+) -> list[str]:
+    families = []
+    if river_id:
+        families.append("setup")
+    if bbs_rank is not None or speed_latest is not None:
+        families.append("attention")
+    if bull_pct is not None or bear_pct is not None:
+        families.append("sentiment")
+    if has_tdnet or has_minkabu:
+        families.append("catalyst")
+    return families
+
+
+def _priority_bonus(
+    *,
+    signal_families: list[str],
+    evidence_items: list[dict],
+    speed_trend: Optional[str],
+    bbs_today: bool,
+    bull_pct: Optional[float],
+    bear_pct: Optional[float],
+) -> tuple[int, dict[str, int], str]:
+    breadth_bonus = min(8, len(signal_families) * 2)
+
+    freshest_days = None
+    catalyst_items = [item for item in evidence_items if item.get("role") == "catalyst"]
+    for item in catalyst_items:
+        try:
+            days = int(item.get("freshness_days"))
+        except (TypeError, ValueError):
+            continue
+        freshest_days = days if freshest_days is None else min(freshest_days, days)
+    freshness_bonus = 0
+    if freshest_days is not None:
+        freshness_bonus = max(0, 5 - min(freshest_days, 5))
+    if bbs_today:
+        freshness_bonus = min(5, freshness_bonus + 2)
+    if speed_trend == "accel":
+        freshness_bonus = min(5, freshness_bonus + 1)
+
+    sentiment_bonus = 0
+    if bull_pct is not None and bear_pct is not None:
+        sentiment_gap = abs(bull_pct - bear_pct)
+        sentiment_bonus = min(4, int(sentiment_gap // 20))
+
+    total = breadth_bonus + freshness_bonus + sentiment_bonus
+    parts = []
+    catalyst_title = None
+    for item in catalyst_items:
+        title = item.get("title")
+        if title:
+            catalyst_title = str(title).strip()
+            break
+    if "setup" in signal_families:
+        parts.append("river fit")
+    if "catalyst" in signal_families:
+        parts.append(f"catalyst: {catalyst_title[:60]}" if catalyst_title else "catalyst")
+    if "attention" in signal_families:
+        parts.append("BBS heat")
+    if "sentiment" in signal_families:
+        parts.append("sentiment")
+    if breadth_bonus:
+        parts.append(f"breadth+{breadth_bonus}")
+    if freshness_bonus:
+        parts.append(f"fresh+{freshness_bonus}")
+    if sentiment_bonus:
+        parts.append(f"sentiment+{sentiment_bonus}")
+    reason = " · ".join(parts[:5]) if parts else "no strong signal"
+    return total, {
+        "breadth_bonus": breadth_bonus,
+        "freshness_bonus": freshness_bonus,
+        "sentiment_bonus": sentiment_bonus,
+    }, reason
 
 
 class CandidateMetrics:
@@ -203,7 +288,7 @@ class CandidateMetrics:
 
     def _load_river_tree(self) -> dict[str, dict]:
         """
-        {ticker: {river_id, river_name, layer, status, primary_river}}
+        {ticker: {river_id, river_name, layer, peer_group, status, primary_river}}
         First occurrence wins when a ticker appears in multiple rivers.
         Dormant/rejected nodes are preserved in the tree but excluded from daily
         candidate scoring.
@@ -224,6 +309,11 @@ class CandidateMetrics:
                         "river_id": river["id"],
                         "river_name": river["name"],
                         "layer": node["layer"],
+                        "peer_group": node.get("peer_group", ""),
+                        "causal_edge": node.get("causal_edge", ""),
+                        "behind_reason": node.get("behind_reason", ""),
+                        "competitor_tickers": node.get("competitor_tickers", []),
+                        "leader_tickers": node.get("leader_tickers", []),
                         "status": status,
                         "primary_river": node.get("primary_river", True),
                     }
@@ -259,6 +349,41 @@ class CandidateMetrics:
                     and math.isfinite(all_prices[t][period])
                 ]
                 avgs[f"avg_{period}"] = round(sum(vals) / len(vals), 2) if vals else None
+            result[key] = avgs
+        return result
+
+    def _compute_peer_group_avgs(self, all_prices: dict[str, dict]) -> dict[tuple, dict]:
+        """
+        {(river_id, peer_group): {median_1y, median_6m, median_3m, median_1m, count}}
+        Uses active/weak nodes only. Empty peer_group values are ignored so the
+        layer benchmark remains the fallback for older tree data.
+        """
+        if not self.tree_path or not os.path.exists(self.tree_path):
+            return {}
+        with open(self.tree_path, encoding="utf-8") as f:
+            data = json.load(f)
+
+        groups: dict[tuple, list[str]] = {}
+        for river in data.get("rivers", []):
+            for node in river.get("nodes", []):
+                node_status = node.get("status", "active")
+                peer_group = node.get("peer_group") or ""
+                if node_status in ("active", "weak") and peer_group:
+                    key = (river["id"], peer_group)
+                    groups.setdefault(key, []).append(node["ticker"])
+
+        result = {}
+        for key, tickers_in_group in groups.items():
+            avgs = {"count": len(tickers_in_group)}
+            for period in ("1y", "6m", "3m", "1m", "4w", "12w"):
+                vals = [
+                    all_prices[t][period]
+                    for t in tickers_in_group
+                    if t in all_prices
+                    and all_prices[t].get(period) is not None
+                    and math.isfinite(all_prices[t][period])
+                ]
+                avgs[f"median_{period}"] = round(float(median(vals)), 2) if vals else None
             result[key] = avgs
         return result
 
@@ -488,6 +613,7 @@ class CandidateMetrics:
         all_prices = {t: self._load_price_changes(t) for t in price_tickers}
 
         layer_avgs = self._compute_layer_avgs(all_prices)
+        peer_group_avgs = self._compute_peer_group_avgs(all_prices)
 
         # Load tree data once for D2 peer computation (avoid re-reading per ticker)
         tree_data_global = {}
@@ -511,12 +637,19 @@ class CandidateMetrics:
 
             layer_avg_1y = None
             laggard_gap = None
+            peer_group_median_1y = None
+            peer_group_laggard_gap = None
             if rf:
                 key = (rf["river_id"], rf["layer"])
                 la = layer_avgs.get(key, {})
                 layer_avg_1y = la.get("avg_1y")
                 if layer_avg_1y is not None and p.get("1y") is not None:
                     laggard_gap = round(p["1y"] - layer_avg_1y, 2)
+                pg_key = (rf["river_id"], rf.get("peer_group", ""))
+                pga = peer_group_avgs.get(pg_key, {})
+                peer_group_median_1y = pga.get("median_1y")
+                if peer_group_median_1y is not None and p.get("1y") is not None:
+                    peer_group_laggard_gap = round(p["1y"] - peer_group_median_1y, 2)
 
             is_today = b.get("is_today", False)
             is_jp = ticker.endswith(".T")
@@ -588,9 +721,12 @@ class CandidateMetrics:
                 has_keyword_routing=has_keyword_routing,
             )
 
-            # D2 — peer 4w returns and active/weak node count from pre-loaded tree data
+            # D2 — peer-group 4w returns when available; otherwise layer peers.
             peer_4w_returns = []
             active_weak_count = 0
+            layer_4w_returns = []
+            layer_active_weak_count = 0
+            peer_group_peer_count = 0
             if rf:
                 for river_d2 in tree_data_global.get("rivers", []):
                     if river_d2["id"] == rf["river_id"]:
@@ -599,11 +735,25 @@ class CandidateMetrics:
                             if (node_d2["layer"] == rf["layer"]
                                     and nstatus in ("active", "weak")
                                     and node_d2["ticker"] != ticker):
-                                active_weak_count += 1
+                                layer_active_weak_count += 1
+                                t_prices = all_prices.get(node_d2["ticker"], {})
+                                r4w = t_prices.get("4w")
+                                if r4w is not None:
+                                    layer_4w_returns.append(r4w)
+                            if (rf.get("peer_group")
+                                    and node_d2.get("peer_group") == rf.get("peer_group")
+                                    and nstatus in ("active", "weak")
+                                    and node_d2["ticker"] != ticker):
+                                peer_group_peer_count += 1
                                 t_prices = all_prices.get(node_d2["ticker"], {})
                                 r4w = t_prices.get("4w")
                                 if r4w is not None:
                                     peer_4w_returns.append(r4w)
+            if peer_group_peer_count >= 1:
+                active_weak_count = peer_group_peer_count
+            else:
+                peer_4w_returns = layer_4w_returns
+                active_weak_count = layer_active_weak_count
             d2 = score_d2(peer_4w_returns, active_weak_count, has_minkabu)
 
             # D3
@@ -611,8 +761,11 @@ class CandidateMetrics:
             d3_candidate_12w = p.get("12w")
             layer_key = (rf["river_id"], rf["layer"]) if rf else None
             la_full = layer_avgs.get(layer_key, {}) if layer_key else {}
-            peer_avg_4w = la_full.get("avg_4w")
-            peer_avg_12w = la_full.get("avg_12w")
+            pg_key = (rf["river_id"], rf.get("peer_group", "")) if rf and rf.get("peer_group") else None
+            pg_full = peer_group_avgs.get(pg_key, {}) if pg_key else {}
+            use_peer_group_benchmark = peer_group_peer_count >= 1 and pg_full.get("median_4w") is not None
+            peer_avg_4w = pg_full.get("median_4w") if use_peer_group_benchmark else la_full.get("avg_4w")
+            peer_avg_12w = pg_full.get("median_12w") if use_peer_group_benchmark else la_full.get("avg_12w")
             valid_peer_count = sum(1 for r4w in peer_4w_returns if r4w is not None)
             d3_val, weak_peer_set = score_d3(
                 d3_candidate_4w, d3_candidate_12w, peer_avg_4w, peer_avg_12w, valid_peer_count
@@ -689,60 +842,90 @@ class CandidateMetrics:
                 new_queue = "C"
                 queue_gate_blocked = None
 
-            rows.append(
-                {
-                    "ticker": ticker,
-                    "name": names.get(ticker, ""),
-                    "market": "JP" if ticker.endswith(".T") else "US",
-                    # BBS
-                    "bbs_rank": b.get("rank") if ticker in bbs else None,
-                    "bbs_today": is_today,
-                    "speed_latest": b.get("speed_latest"),
-                    "speed_prev": b.get("speed_prev"),
-                    "speed_trend": b.get("trend"),
-                    "has_yahoo_jp_bbs": b.get("has_yahoo_jp_bbs"),
-                    # Sentiment
-                    "bull_pct": bull_pct,
-                    "bear_pct": bear_pct,
-                    "eval_scraped_at": s.get("scraped_at"),
-                    # River fit
-                    "river_id": rf["river_id"] if rf else None,
-                    "river_name": rf["river_name"] if rf else None,
-                    "layer": rf["layer"] if rf else None,
-                    # Price / laggard
-                    "return_1y": p.get("1y"),
-                    "return_6m": p.get("6m"),
-                    "return_3m": p.get("3m"),
-                    "return_1m": p.get("1m"),
-                    "last_close": p.get("last_close"),
-                    "price_date": p.get("last_date"),
-                    "layer_avg_1y": layer_avg_1y,
-                    "laggard_gap_1y": laggard_gap,
-                    # Catalyst
-                    "has_tdnet_48h": bool(tdnet_items),
-                    "has_minkabu": has_minkabu,
-                    # New D1-D6 score components
-                    "d1_river_fit": d1,
-                    "d2_layer_alpha": d2,
-                    "d3_relative_laggard": d3_val,
-                    "d4_catalyst": d4_val,
-                    "d5_attention_change": d5,
-                    "d6_coverage_gap": d6,
-                    "raw_score": int(d1 + d2 + d3_val + d4_val + d5 + d6),
-                    "decision_memory_adjustment": dm_adj,
-                    "noise_penalty": noise,
-                    "node_status": node_status,
-                    "pass_count": pass_count,
-                    "suppress_until": dec_entry.get("suppress_until"),
-                    "queue_gate_blocked": queue_gate_blocked,
-                    "weak_peer_set": weak_peer_set,
-                    "evidence_packet": evidence_items,
-                    # Score (new model overrides legacy)
-                    "score": new_final_score,
-                    "queue": new_queue,
-                    "queue_reason": reason,
-                }
+            row = {
+                "ticker": ticker,
+                "name": names.get(ticker, ""),
+                "market": "JP" if ticker.endswith(".T") else "US",
+                # BBS
+                "bbs_rank": b.get("rank") if ticker in bbs else None,
+                "bbs_today": is_today,
+                "speed_latest": b.get("speed_latest"),
+                "speed_prev": b.get("speed_prev"),
+                "speed_trend": b.get("trend"),
+                "has_yahoo_jp_bbs": b.get("has_yahoo_jp_bbs"),
+                # Sentiment
+                "bull_pct": bull_pct,
+                "bear_pct": bear_pct,
+                "eval_scraped_at": s.get("scraped_at"),
+                # River fit
+                "river_id": rf["river_id"] if rf else None,
+                "river_name": rf["river_name"] if rf else None,
+                "layer": rf["layer"] if rf else None,
+                "peer_group": rf.get("peer_group") if rf else None,
+                "causal_edge": rf.get("causal_edge") if rf else None,
+                "behind_reason": rf.get("behind_reason") if rf else None,
+                "competitor_tickers": rf.get("competitor_tickers", []) if rf else [],
+                "leader_tickers": rf.get("leader_tickers", []) if rf else [],
+                # Price / laggard
+                "return_1y": p.get("1y"),
+                "return_6m": p.get("6m"),
+                "return_3m": p.get("3m"),
+                "return_1m": p.get("1m"),
+                "last_close": p.get("last_close"),
+                "price_date": p.get("last_date"),
+                "layer_avg_1y": layer_avg_1y,
+                "laggard_gap_1y": laggard_gap,
+                "peer_group_median_1y": peer_group_median_1y,
+                "peer_group_laggard_gap_1y": peer_group_laggard_gap,
+                "peer_group_peer_count": peer_group_peer_count,
+                "laggard_benchmark": "peer_group" if use_peer_group_benchmark else "layer",
+                # Catalyst
+                "has_tdnet_48h": bool(tdnet_items),
+                "has_minkabu": has_minkabu,
+                # New D1-D6 score components
+                "d1_river_fit": d1,
+                "d2_layer_alpha": d2,
+                "d3_relative_laggard": d3_val,
+                "d4_catalyst": d4_val,
+                "d5_attention_change": d5,
+                "d6_coverage_gap": d6,
+                "raw_score": int(d1 + d2 + d3_val + d4_val + d5 + d6),
+                "decision_memory_adjustment": dm_adj,
+                "noise_penalty": noise,
+                "node_status": node_status,
+                "pass_count": pass_count,
+                "suppress_until": dec_entry.get("suppress_until"),
+                "queue_gate_blocked": queue_gate_blocked,
+                "weak_peer_set": weak_peer_set,
+                "evidence_packet": evidence_items,
+                # Score (new model overrides legacy)
+                "score": new_final_score,
+                "queue": new_queue,
+                "queue_reason": reason,
+            }
+
+            signal_families = _priority_signal_families(
+                river_id=row["river_id"],
+                bbs_rank=row["bbs_rank"],
+                speed_latest=row["speed_latest"],
+                bull_pct=row["bull_pct"],
+                bear_pct=row["bear_pct"],
+                has_tdnet=row["has_tdnet_48h"],
+                has_minkabu=row["has_minkabu"],
             )
+            bonus, bonus_parts, bonus_reason = _priority_bonus(
+                signal_families=signal_families,
+                evidence_items=evidence_items,
+                speed_trend=row["speed_trend"],
+                bbs_today=row["bbs_today"],
+                bull_pct=row["bull_pct"],
+                bear_pct=row["bear_pct"],
+            )
+            row["signal_families"] = signal_families
+            row["priority_bonus"] = bonus_parts
+            row["priority_reason"] = bonus_reason
+            row["priority_score"] = min(100, row["score"] + bonus)
+            rows.append(row)
 
         # Apply suppression penalty — suppressed "pass" tickers get score capped at 5
         # and are moved to suppressed queue so they don't consume attention
@@ -764,5 +947,12 @@ class CandidateMetrics:
             for row in rows:
                 row.setdefault("suppressed", False)
 
-        rows.sort(key=lambda r: r["score"], reverse=True)
+        rows.sort(
+            key=lambda r: (
+                -int(r.get("priority_score", r["score"])),
+                -int(r.get("score", 0)),
+                -int(r.get("d1_river_fit", 0)),
+                str(r.get("ticker", "")),
+            )
+        )
         return rows

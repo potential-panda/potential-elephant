@@ -112,6 +112,41 @@ def _load_tdnet(ticker: str) -> list[dict]:
     return _df_records(df, limit=30)
 
 
+def _infer_source_from_loaded_data(ticker: str, source_id: str, rows: list[dict]) -> dict | None:
+    if source_id != "fool_quote_news" or not rows:
+        return None
+    fool_rows = [
+        row for row in rows
+        if row.get("quote_url") or row.get("source") == "fool_us_quote_news"
+    ]
+    if not fool_rows:
+        return None
+
+    from elephant.source.availability import source_symbol_and_urls
+
+    symbol, fallback_urls = source_symbol_and_urls(source_id, ticker)
+    urls = [str(row.get("quote_url")).strip() for row in fool_rows if row.get("quote_url")]
+    urls = list(dict.fromkeys(url for url in urls if url))
+    harvested_at = None
+    scraped_values = [row.get("scraped_at") for row in fool_rows if row.get("scraped_at")]
+    if scraped_values:
+        try:
+            harvested_at = max(pd.to_datetime(scraped_values, errors="coerce")).isoformat()
+        except Exception:
+            harvested_at = None
+    return {
+        "ticker": normalize_ticker(ticker),
+        "source_id": source_id,
+        "status": "available",
+        "source_symbol": symbol,
+        "urls": urls or fallback_urls,
+        "checked_at": harvested_at or "",
+        "last_harvested_at": harvested_at,
+        "last_row_count": len(fool_rows),
+        "availability_inferred_from_dataset": True,
+    }
+
+
 def _load_comments(ticker: str) -> list[dict]:
     df = load_yjp_comments(ticker)
     if df.empty:
@@ -153,6 +188,12 @@ def get_detail(ticker_raw: str) -> dict:
     registry = SourceRegistry()
     source_defs = list_sources(scope="ticker")
     resolved_sources = registry.resolved_sources(ticker)
+    news = _load_news(ticker)
+    fool_inferred = _infer_source_from_loaded_data(ticker, "fool_quote_news", news)
+    if fool_inferred:
+        current = resolved_sources.get("fool_quote_news") or {}
+        if current.get("status") != "available" or not current.get("urls"):
+            resolved_sources["fool_quote_news"] = fool_inferred
 
     sources = []
     for source_def in source_defs:
@@ -193,6 +234,6 @@ def get_detail(ticker_raw: str) -> dict:
         "comments": _load_comments(ticker),
         "evaluations": _load_evaluations(ticker),
         "minkabu": _load_minkabu_latest(ticker),
-        "news": _load_news(ticker),
+        "news": news,
         "tdnet": _load_tdnet(ticker),
     }

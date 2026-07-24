@@ -11,3 +11,8 @@ function detectAppBase() {
 }
 
 export const APP_BASE = detectAppBase();
+
+export function appHashHref(path) {
+  const clean = String(path || '').startsWith('/') ? String(path) : `/${String(path || '')}`;
+  return `${APP_BASE}/#${clean}`;
+}

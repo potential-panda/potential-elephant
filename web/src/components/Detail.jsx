@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { getDetail, getTickersV2, getJobV2, startDiveV2 } from '../api'
+import { getDetail, getJobV2, recordDecisionV2, startDiveV2 } from '../api'
 import TickerLink from './TickerLink'
 
 function Spinner() {
@@ -222,7 +222,7 @@ function SignalsTable({ signals }) {
 
   return (
     <div className="bg-slate-950/50 border border-slate-800 rounded-lg overflow-x-auto">
-      <table className="w-full text-xs">
+      <table className="w-full min-w-max text-xs">
         <thead>
           <tr className="border-b border-slate-800 text-slate-500 uppercase tracking-wider">
             <th className="text-left px-3 py-2">Kind</th>
@@ -305,7 +305,7 @@ function RawTable({ rows, columns, empty = 'No data available.' }) {
 
   return (
     <div className="bg-slate-950/50 border border-slate-800 rounded-lg overflow-x-auto">
-      <table className="w-full text-xs">
+      <table className="w-full min-w-max text-xs">
         <thead>
           <tr className="border-b border-slate-800 text-slate-500 uppercase tracking-wider">
             {columns.map((col) => (
@@ -371,21 +371,16 @@ function MarkdownBlock({ content }) {
 }
 
 export default function Detail() {
-  const [inputVal, setInputVal] = useState(tickerFromHash)
   const [ticker, setTicker] = useState(tickerFromHash)
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
-  const [knownTickers, setKnownTickers] = useState([])
   const [diving, setDiving] = useState(false)
   const [diveError, setDiveError] = useState(null)
+  const [watching, setWatching] = useState(false)
+  const [watchError, setWatchError] = useState(null)
+  const [watchMessage, setWatchMessage] = useState(null)
   const pollRef = useRef(null)
-
-  useEffect(() => {
-    getTickersV2()
-      .then((d) => setKnownTickers((d.items || []).map((item) => item.ticker)))
-      .catch(() => {})
-  }, [])
 
   useEffect(() => {
     const onHash = () => {
@@ -404,6 +399,8 @@ export default function Detail() {
     setLoading(true)
     setError(null)
     setData(null)
+    setWatchError(null)
+    setWatchMessage(null)
     getDetail(ticker)
       .then(setData)
       .catch((e) => setError(e.message))
@@ -613,12 +610,39 @@ export default function Detail() {
       })
   }
 
-  const handleSubmit = (e) => {
-    e.preventDefault()
-    const next = inputVal.trim()
-    if (!next) return
-    window.location.hash = `/detail/${encodeURIComponent(next)}`
-    setTicker(next)
+  const handleWatch = () => {
+    if (!ticker || !data) return
+    setWatching(true)
+    setWatchError(null)
+    setWatchMessage(null)
+
+    const score = data.analysis?.score || {}
+    const snapshot = {
+      last_close: data.price?.summary?.last_close ?? null,
+      price_date: data.price?.summary?.last_date ?? null,
+      score: score.score ?? null,
+      confidence: score.confidence ?? null,
+      direction: score.direction ?? null,
+      river_id: score.river_id ?? null,
+      layer: score.layer ?? null,
+    }
+
+    recordDecisionV2({
+      ticker: data.ticker || ticker,
+      decision: 'watch',
+      reason: 'manual watch from detail page',
+      snapshot,
+      what_would_change: 'keep tracking this ticker from the detail view',
+    })
+      .then(() => {
+        setWatchMessage('Saved to watchlist')
+      })
+      .catch((e) => {
+        setWatchError(e.message)
+      })
+      .finally(() => {
+        setWatching(false)
+      })
   }
 
   if (loading) return <Spinner />
@@ -638,33 +662,21 @@ export default function Detail() {
               ticker={data.ticker}
               className="text-slate-300 hover:text-emerald-300 hover:underline font-mono"
             />
+            <div className="mt-3 flex flex-col items-end gap-2">
+              <button
+                type="button"
+                onClick={handleWatch}
+                disabled={watching}
+                className="px-4 py-2 rounded border border-sky-700 bg-sky-900/30 hover:bg-sky-900 text-xs text-sky-300 disabled:opacity-60 disabled:cursor-not-allowed"
+              >
+                {watching ? 'Saving...' : 'Save to Watchlist'}
+              </button>
+              {watchMessage ? <div className="text-xs text-emerald-400">{watchMessage}</div> : null}
+              {watchError ? <div className="text-xs text-red-400">{watchError}</div> : null}
+            </div>
           </div>
         ) : null}
       </div>
-
-      <form onSubmit={handleSubmit} className="flex gap-2 mb-6">
-        <div className="relative flex-1 max-w-xs">
-          <input
-            list="detail-ticker-list"
-            value={inputVal}
-            onChange={(e) => setInputVal(e.target.value)}
-            placeholder="Ticker (e.g. AMZN or 9984.T)"
-            className="w-full bg-slate-800 border border-slate-700 text-slate-100 placeholder-slate-600 rounded-md px-3 py-2 text-sm font-mono focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500/50"
-          />
-          <datalist id="detail-ticker-list">
-            {knownTickers.map((t) => (
-              <option key={t} value={t} />
-            ))}
-          </datalist>
-        </div>
-        <button
-          type="submit"
-          disabled={!inputVal.trim()}
-          className="px-5 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-700 disabled:text-slate-500 text-white text-sm font-medium rounded-md transition-colors"
-        >
-          Show
-        </button>
-      </form>
 
       {!data ? (
         <p className="text-slate-600 text-sm">No ticker selected.</p>

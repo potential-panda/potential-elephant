@@ -95,8 +95,8 @@ function SourceStatusTable({ rows, defs }) {
 
   const defMap = Object.fromEntries((defs || []).map((d) => [d.source_id, d]))
   return (
-    <div className="bg-slate-900 border border-slate-800 rounded-lg overflow-hidden">
-      <table className="w-full text-xs">
+    <div className="bg-slate-900 border border-slate-800 rounded-lg overflow-x-auto">
+      <table className="w-full min-w-max text-xs">
         <thead>
           <tr className="border-b border-slate-800 text-slate-500 uppercase tracking-wider">
             <th className="text-left px-3 py-2">Source</th>
@@ -132,8 +132,8 @@ function SourceRunTable({ runs }) {
   if (!runs || runs.length === 0) return <p className="text-slate-600 text-sm">No recent runs.</p>
 
   return (
-    <div className="bg-slate-900 border border-slate-800 rounded-lg overflow-hidden">
-      <table className="w-full text-xs">
+    <div className="bg-slate-900 border border-slate-800 rounded-lg overflow-x-auto">
+      <table className="w-full min-w-max text-xs">
         <thead>
           <tr className="border-b border-slate-800 text-slate-500 uppercase tracking-wider">
             <th className="text-left px-3 py-2 w-40">Finished</th>

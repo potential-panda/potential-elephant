@@ -82,3 +82,79 @@ SEED_NODES: dict[str, list[dict]] = {
         {"ticker": "9021.T", "layer": "lower",  "market": "JP", "name": "West Japan Railway", "role": "Specialized clinical cargo routes"},
     ],
 }
+
+
+_RIVER_CAUSAL_EDGES = {
+    "ai_infra": "hyperscaler AI CapEx -> compute/networking demand -> component and power bottlenecks",
+    "tech_local": "fab localization and policy support -> semiconductor equipment demand -> precision tool/material bottlenecks",
+    "physical_ai": "robotics deployment programs -> sensing/actuation demand -> precision component bottlenecks",
+    "longevity": "GLP-1 and advanced therapy demand -> drug delivery/API scale-up -> healthcare logistics capacity",
+}
+
+_PEER_GROUPS_BY_TICKER = {
+    # AI infra
+    "MSFT": "hyperscaler_capex",
+    "GOOGL": "hyperscaler_capex",
+    "AMZN": "hyperscaler_capex",
+    "META": "hyperscaler_capex",
+    "NVDA": "ai_accelerator_platform",
+    "AVGO": "ai_networking_asic",
+    "SMH": "semiconductor_etf",
+    "XSD": "semiconductor_etf",
+    "6702.T": "server_integrator",
+    "MU": "hbm_memory",
+    "6503.T": "power_semiconductor_cooling",
+    "VST": "ai_power_generation",
+    "CEG": "ai_power_generation",
+    "XLU": "power_infrastructure_etf",
+    "NLR": "nuclear_power_etf",
+    "POWR": "power_infrastructure_etf",
+    "6501.T": "grid_hardware",
+    "9501.T": "electric_utility",
+    # Tech localization
+    "TSM": "foundry_localization",
+    "INTC": "foundry_localization",
+    "ASML": "lithography_equipment",
+    "LRCX": "wafer_fab_equipment",
+    "AMAT": "wafer_fab_equipment",
+    "6146.T": "precision_wafer_processing",
+    "8035.T": "wafer_fab_equipment",
+    "6857.T": "semiconductor_test_equipment",
+    "PLD": "industrial_real_estate",
+    "XLI": "industrial_etf",
+    "6506.T": "factory_automation",
+    "6273.T": "factory_automation",
+    # Physical AI
+    "TSLA": "robotics_capex",
+    "ROBO": "robotics_etf",
+    "BOTZ": "robotics_etf",
+    "6594.T": "robotics_motors",
+    "6324.T": "robotics_precision_gears",
+    "6861.T": "machine_vision_sensors",
+    "ARKQ": "autonomous_technology_etf",
+    "9020.T": "robotics_logistics_deployment",
+    # Longevity
+    "LLY": "glp1_therapy_leader",
+    "NVO": "glp1_therapy_leader",
+    "WST": "drug_delivery_components",
+    "4568.T": "advanced_pharma_manufacturing",
+    "4519.T": "advanced_pharma_manufacturing",
+    "CAH": "pharma_distribution",
+    "MCK": "pharma_distribution",
+    "9021.T": "clinical_cold_chain_logistics",
+}
+
+
+def _attach_peer_metadata() -> None:
+    for river_id, nodes in SEED_NODES.items():
+        causal_edge = _RIVER_CAUSAL_EDGES.get(river_id, "")
+        for node in nodes:
+            node.setdefault("peer_group", _PEER_GROUPS_BY_TICKER.get(node["ticker"], node["layer"]))
+            node.setdefault("causal_edge", causal_edge)
+            node.setdefault(
+                "behind_reason",
+                "Compare against this peer group to separate delayed re-rating from structural weakness.",
+            )
+
+
+_attach_peer_metadata()

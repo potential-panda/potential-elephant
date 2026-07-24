@@ -36,7 +36,7 @@ function ErrorMsg({ msg }) {
 
 function CommentsTable({ records }) {
   return (
-    <table className="w-full text-xs">
+    <table className="w-full min-w-max text-xs">
       <thead>
         <tr className="border-b border-slate-800 text-slate-500 text-xs uppercase tracking-wider">
           <th className="text-left px-3 py-2 w-40">DateTime</th>
@@ -61,7 +61,7 @@ function CommentsTable({ records }) {
 
 function EvaluationsTable({ records }) {
   return (
-    <table className="w-full text-xs">
+    <table className="w-full min-w-max text-xs">
       <thead>
         <tr className="border-b border-slate-800 text-slate-500 text-xs uppercase tracking-wider">
           <th className="text-left px-3 py-2">Scraped At</th>
@@ -105,7 +105,7 @@ function sourceDomain(url) {
 
 function NewsTable({ records }) {
   return (
-    <table className="w-full text-xs">
+    <table className="w-full min-w-max text-xs">
       <thead>
         <tr className="border-b border-slate-800 text-slate-500 text-xs uppercase tracking-wider">
           <th className="text-left px-3 py-2 w-28">Date</th>
@@ -157,7 +157,7 @@ function GenericTable({ records }) {
   if (!records || records.length === 0) return null
   const keys = Object.keys(records[0])
   return (
-    <table className="w-full text-xs">
+    <table className="w-full min-w-max text-xs">
       <thead>
         <tr className="border-b border-slate-800 text-slate-500 text-xs uppercase tracking-wider">
           {keys.map((k) => (

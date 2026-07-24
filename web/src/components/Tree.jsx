@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { getTree, getPriceChanges } from '../api'
 import StorageFooter from './StorageFooter'
+import { appHashHref } from '../app-base'
 
 const LAYER_STYLE = {
   source: {
@@ -41,6 +42,11 @@ function layerAvg(nodes, prices, period) {
   return vals.reduce((a, b) => a + b, 0) / vals.length
 }
 
+function groupLabel(value) {
+  if (!value) return 'Unassigned'
+  return value.replace(/_/g, ' ')
+}
+
 function pctColor(v) {
   if (v == null) return 'text-slate-600'
   return v >= 0 ? 'text-emerald-400' : 'text-red-400'
@@ -64,21 +70,24 @@ function vsLayerColor(delta) {
   return 'text-slate-600'
 }
 
-function TickerChip({ node, priceData, avgs }) {
+function TickerChip({ node, priceData, avgs, peerAvgs }) {
   const style = LAYER_STYLE[node.layer] || {
     chip: 'bg-slate-800/60 border-slate-700 hover:border-slate-500',
     laggard: 'bg-slate-800/80 border-amber-600/60 hover:border-amber-400/80',
   }
   const p = priceData || {}
   const delta1y = (p['1y'] != null && avgs['1y'] != null) ? p['1y'] - avgs['1y'] : null
-  const isLaggard = delta1y != null && delta1y <= -10
+  const peerDelta1y = (p['1y'] != null && peerAvgs?.['1y'] != null) ? p['1y'] - peerAvgs['1y'] : null
+  const primaryDelta = peerDelta1y ?? delta1y
+  const isLaggard = primaryDelta != null && primaryDelta <= -10
   const chipClass = isLaggard ? style.laggard : style.chip
 
   return (
     <a
-      href={`/#/detail/${encodeURIComponent(node.ticker)}`}
+      href={appHashHref(`/detail/${encodeURIComponent(node.ticker)}`)}
+      title={node.causal_edge || node.role || node.name}
       className={[
-        'inline-flex flex-col px-3 py-2 rounded border text-xs transition-colors min-w-[120px]',
+        'inline-flex flex-col px-3 py-2 rounded border text-xs transition-colors min-w-[132px]',
         chipClass,
       ].join(' ')}
     >
@@ -96,12 +105,17 @@ function TickerChip({ node, priceData, avgs }) {
       )}
 
       {/* vs layer — primary signal */}
-      <div className={['font-mono text-[11px] font-semibold mb-1.5', vsLayerColor(delta1y)].join(' ')}>
-        {delta1y == null
-          ? <span className="text-slate-700">— vs layer</span>
-          : <>{delta1y >= 0 ? '+' : ''}{delta1y.toFixed(1)}% vs layer</>
+      <div className={['font-mono text-[11px] font-semibold mb-0.5', vsLayerColor(primaryDelta)].join(' ')}>
+        {primaryDelta == null
+          ? <span className="text-slate-700">— vs peer</span>
+          : <>{primaryDelta >= 0 ? '+' : ''}{primaryDelta.toFixed(1)}% vs {peerDelta1y == null ? 'layer' : 'peer'}</>
         }
       </div>
+      {peerDelta1y != null && delta1y != null && (
+        <div className={['font-mono text-[10px] mb-1.5', vsLayerColor(delta1y)].join(' ')}>
+          {delta1y >= 0 ? '+' : ''}{delta1y.toFixed(1)}% vs layer
+        </div>
+      )}
 
       {/* 4-period grid (smaller, context only) */}
       <div className="grid grid-cols-2 gap-x-2 gap-y-0.5 font-mono text-[10px]">
@@ -124,23 +138,59 @@ function LayerSection({ layer, nodes, prices }) {
   const avgs = {}
   PERIODS.forEach((p) => { avgs[p] = layerAvg(nodes, prices, p) })
 
-  // Sort nodes: laggards (most negative 1y vs layer) first, then leaders, then no-data
-  const sorted = [...nodes].sort((a, b) => {
-    const da = prices[a.ticker]?.['1y'] != null && avgs['1y'] != null
-      ? prices[a.ticker]['1y'] - avgs['1y'] : null
-    const db = prices[b.ticker]?.['1y'] != null && avgs['1y'] != null
-      ? prices[b.ticker]['1y'] - avgs['1y'] : null
-    if (da == null && db == null) return 0
-    if (da == null) return 1
-    if (db == null) return -1
-    return da - db  // ascending: most negative (laggard) first
+  const groups = nodes.reduce((acc, node) => {
+    const key = node.peer_group || 'unassigned'
+    if (!acc[key]) acc[key] = []
+    acc[key].push(node)
+    return acc
+  }, {})
+
+  const sortedGroups = Object.entries(groups).sort(([aKey, aNodes], [bKey, bNodes]) => {
+    const aAvg = layerAvg(aNodes, prices, '1y')
+    const bAvg = layerAvg(bNodes, prices, '1y')
+    const aMin = Math.min(...aNodes.map((n) => {
+      const base = aNodes.length > 1 ? aAvg : avgs['1y']
+      return prices[n.ticker]?.['1y'] != null && base != null ? prices[n.ticker]['1y'] - base : Infinity
+    }))
+    const bMin = Math.min(...bNodes.map((n) => {
+      const base = bNodes.length > 1 ? bAvg : avgs['1y']
+      return prices[n.ticker]?.['1y'] != null && base != null ? prices[n.ticker]['1y'] - base : Infinity
+    }))
+    if (aMin !== bMin) return aMin - bMin
+    return groupLabel(aKey).localeCompare(groupLabel(bKey))
   })
 
-  const laggardCount = sorted.filter((n) => {
-    const d = prices[n.ticker]?.['1y'] != null && avgs['1y'] != null
-      ? prices[n.ticker]['1y'] - avgs['1y'] : null
+  function sortedNodes(groupNodes) {
+    const peerAvgs = {}
+    PERIODS.forEach((p) => { peerAvgs[p] = layerAvg(groupNodes, prices, p) })
+    return [...groupNodes].sort((a, b) => {
+      const aBase = groupNodes.length > 1 ? peerAvgs['1y'] : avgs['1y']
+      const bBase = groupNodes.length > 1 ? peerAvgs['1y'] : avgs['1y']
+      const da = prices[a.ticker]?.['1y'] != null && aBase != null
+        ? prices[a.ticker]['1y'] - aBase : null
+      const db = prices[b.ticker]?.['1y'] != null && bBase != null
+        ? prices[b.ticker]['1y'] - bBase : null
+      if (da == null && db == null) return 0
+      if (da == null) return 1
+      if (db == null) return -1
+      return da - db
+    })
+  }
+
+  const laggardCount = nodes.filter((n) => {
+    const groupNodes = groups[n.peer_group || 'unassigned'] || []
+    const peerAvg = groupNodes.length > 1 ? layerAvg(groupNodes, prices, '1y') : null
+    const base = peerAvg ?? avgs['1y']
+    const d = prices[n.ticker]?.['1y'] != null && base != null
+      ? prices[n.ticker]['1y'] - base : null
     return d != null && d <= -10
   }).length
+
+  function peerAverages(groupNodes) {
+    const result = {}
+    PERIODS.forEach((p) => { result[p] = groupNodes.length > 1 ? layerAvg(groupNodes, prices, p) : null })
+    return result
+  }
 
   return (
     <div className="mb-8">
@@ -165,10 +215,36 @@ function LayerSection({ layer, nodes, prices }) {
       {nodes.length === 0 ? (
         <p className="text-slate-700 text-xs">—</p>
       ) : (
-        <div className="flex flex-wrap gap-2">
-          {sorted.map((node, i) => (
-            <TickerChip key={i} node={node} priceData={prices[node.ticker]} avgs={avgs} />
-          ))}
+        <div className="space-y-3">
+          {sortedGroups.map(([group, groupNodes]) => {
+            const peerAvgs = peerAverages(groupNodes)
+            return (
+              <div key={group}>
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="text-[11px] font-mono uppercase text-slate-500">
+                    {groupLabel(group)}
+                  </span>
+                  <span className="text-[10px] text-slate-700">{groupNodes.length} peers</span>
+                  {peerAvgs['1y'] != null && (
+                    <span className="text-[10px] font-mono text-slate-600">
+                      median 1y {peerAvgs['1y'] >= 0 ? '+' : ''}{peerAvgs['1y'].toFixed(1)}%
+                    </span>
+                  )}
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {sortedNodes(groupNodes).map((node, i) => (
+                    <TickerChip
+                      key={i}
+                      node={node}
+                      priceData={prices[node.ticker]}
+                      avgs={avgs}
+                      peerAvgs={peerAvgs}
+                    />
+                  ))}
+                </div>
+              </div>
+            )
+          })}
         </div>
       )}
     </div>

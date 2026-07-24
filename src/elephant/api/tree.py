@@ -31,6 +31,11 @@ def get_tree() -> dict:
                 "last_human_decision_date": node.last_human_decision_date,
                 "evidence_refs": node.evidence_refs,
                 "primary_river": node.primary_river,
+                "peer_group": node.peer_group,
+                "causal_edge": node.causal_edge,
+                "behind_reason": node.behind_reason,
+                "competitor_tickers": node.competitor_tickers,
+                "leader_tickers": node.leader_tickers,
             })
         rivers.append({
             "id": river.id,
