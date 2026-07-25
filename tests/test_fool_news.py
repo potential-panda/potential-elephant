@@ -36,6 +36,10 @@ def test_fool_quote_urls_try_common_us_exchanges():
     ]
 
 
+def test_fool_quote_urls_use_exchange_overrides():
+    assert _fool_quote_urls("COHR") == ["https://www.fool.com/quote/nyse/cohr/"]
+
+
 def test_parse_fool_card_extracts_article_metadata():
     scraped_at = datetime(2026, 6, 30, 12, 0)
     row = _parse_fool_card(

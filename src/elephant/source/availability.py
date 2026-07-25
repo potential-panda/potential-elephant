@@ -1,4 +1,5 @@
 from elephant.source.catalog import get_source, list_sources
+from elephant.source.fool_urls import fool_quote_urls
 from elephant.source.registry import SourceAvailability, SourceRegistry
 from elephant.source.run_log import finish_run, start_run
 from elephant.source.tickers import all_known_tickers, market_for_ticker
@@ -18,8 +19,7 @@ def source_symbol_and_urls(source_id: str, ticker: str) -> tuple[str, list[str]]
     if source_id == "yahoo_jp_bbs":
         return canonical, [f"https://finance.yahoo.co.jp/quote/{canonical}/forum"]
     if source_id == "fool_quote_news":
-        symbol = canonical.lower().replace(".", "-")
-        return symbol, [f"https://www.fool.com/quote/{exchange}/{symbol}/" for exchange in ("nasdaq", "nyse", "amex")]
+        return fool_quote_urls(canonical)
     if source_id == "daily_prices":
         return canonical, [f"yfinance://{canonical}"]
     raise ValueError(f"No ticker URL resolver for source: {source_id}")

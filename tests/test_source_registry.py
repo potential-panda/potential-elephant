@@ -40,3 +40,4 @@ def test_source_adapters_resolve_source_specific_symbols():
     assert MinkabuAdapter().url_for("SMCI") == ("SMCI", "https://us.minkabu.jp/stocks/SMCI")
     assert YahooJpBbsAdapter().url_for("7203.T") == ("7203.T", "https://finance.yahoo.co.jp/quote/7203.T/forum")
     assert FoolQuoteNewsAdapter().urls_for("SMCI")[0] == "https://www.fool.com/quote/nasdaq/smci/"
+    assert FoolQuoteNewsAdapter().urls_for("COHR") == ["https://www.fool.com/quote/nyse/cohr/"]

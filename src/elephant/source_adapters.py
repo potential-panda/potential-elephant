@@ -3,6 +3,7 @@ from dataclasses import dataclass
 from typing import Iterable
 
 from elephant.source_registry import SourceAvailability
+from elephant.source.fool_urls import fool_quote_urls
 from elephant.ticker_registry import is_jp_ticker, normalize_ticker
 from elephant.web_client import open_web_page, page_has_selector, visit_page
 
@@ -34,8 +35,7 @@ class FoolQuoteNewsAdapter(SourceAdapter):
         )
 
     def urls_for(self, ticker: str) -> list[str]:
-        source_symbol = normalize_ticker(ticker).lower().replace(".", "-")
-        return [f"https://www.fool.com/quote/{exchange}/{source_symbol}/" for exchange in ["nasdaq", "nyse", "amex"]]
+        return fool_quote_urls(ticker)[1]
 
     async def check_availability(self, ticker: str) -> SourceAvailability:
         canonical = normalize_ticker(ticker.strip().upper())

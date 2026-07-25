@@ -9,6 +9,7 @@ import feedparser
 
 from elephant.config import SOURCE_REGISTRY_FILE, TICKERS_FILE
 from elephant.framework import Harvester, HarvesterResult, Store
+from elephant.source.fool_urls import fool_quote_urls
 from elephant.web_client import open_web_page, visit_page
 from elephant.source_registry import SourceRegistry
 from elephant.ticker_registry import load_us_tickers, normalize_ticker
@@ -53,7 +54,6 @@ RSS_FEEDS = [
 MAX_ITEMS_PER_FEED = 20
 NEWS_DAYS = 5  # ignore articles older than this
 FOOL_MAX_TICKERS = 50
-FOOL_EXCHANGES = ["nasdaq", "nyse", "amex"]
 FOOL_DATE_RE = re.compile(r"[A-Z][a-z]{2} \d{1,2}, \d{4}")
 
 # HTML pages (no RSS) — scraped via playwright.
@@ -141,8 +141,7 @@ def _load_fool_sources(params: dict, registry_file: str = SOURCE_REGISTRY_FILE) 
 
 
 def _fool_quote_urls(ticker: str) -> list[str]:
-    symbol = ticker.lower().replace(".", "-")
-    return [f"https://www.fool.com/quote/{exchange}/{symbol}/" for exchange in FOOL_EXCHANGES]
+    return fool_quote_urls(ticker)[1]
 
 
 def _parse_fool_card(raw: dict, ticker: str, quote_url: str, scraped_at: datetime) -> dict | None:

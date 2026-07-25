@@ -33,6 +33,10 @@ def test_source_symbol_resolution_consumes_source_specific_ticker_gaps():
         ["https://finance.yahoo.co.jp/quote/7203.T/forum"],
     )
     assert source_symbol_and_urls("fool_quote_news", "SMCI")[1][0] == "https://www.fool.com/quote/nasdaq/smci/"
+    assert source_symbol_and_urls("fool_quote_news", "COHR") == (
+        "cohr",
+        ["https://www.fool.com/quote/nyse/cohr/"],
+    )
 
 
 def test_source_registry_drives_ticker_harvest_tasks(tmp_path):
