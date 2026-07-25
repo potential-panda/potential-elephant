@@ -7,7 +7,7 @@ import elephant.secrets as _secrets
 _secrets.load()
 
 from fastapi import FastAPI, HTTPException, Query
-from fastapi.bottleneckware.cors import CORSBottleneckware
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -16,8 +16,8 @@ from elephant import decisions as _decisions
 
 app = FastAPI(title="Elephant Research Dashboard", version="1.0.0")
 
-app.add_bottleneckware(
-    CORSBottleneckware,
+app.add_middleware(
+    CORSMiddleware,
     allow_origins=["*"],
     allow_methods=["*"],
     allow_headers=["*"],
@@ -76,6 +76,11 @@ def api_schedule_plan():
 
 @app.get("/api/atlas")
 def api_atlas():
+    return atlas.get_atlas()
+
+
+@app.get("/api/tree")
+def api_tree_alias():
     return atlas.get_atlas()
 
 

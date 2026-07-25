@@ -44,7 +44,36 @@ export const getSourceRuns = (limit = 20) => api2Fetch(`/source-runs?limit=${enc
 export const getSourceRegistry = () => api2Fetch('/source-registry')
 export const getSourceDefinitions = (scope = 'ticker') => api2Fetch(`/sources?scope=${encodeURIComponent(scope)}`)
 
-export const getAtlas = () => api2Fetch('/atlas')
+function normalizeAtlasPayload(payload) {
+  const stageMap = {
+    source: 'driver',
+    upper: 'prime',
+    middle: 'bottleneck',
+    lower: 'capacity',
+  }
+  const stages = payload.stages || payload.layers || ['driver', 'prime', 'bottleneck', 'capacity']
+  const valueChains = (payload.value_chains || payload.rivers || []).map((valueChain) => ({
+    ...valueChain,
+    companies: (valueChain.companies || valueChain.nodes || []).map((company) => ({
+      ...company,
+      stage: stageMap[company.stage || company.layer] || company.stage || company.layer,
+      primary_value_chain: company.primary_value_chain ?? company.primary_river ?? true,
+    })),
+  }))
+  return {
+    ...payload,
+    stages: stages.map((stage) => stageMap[stage] || stage),
+    value_chains: valueChains,
+  }
+}
+
+export const getAtlas = async () => {
+  try {
+    return normalizeAtlasPayload(await api2Fetch('/atlas'))
+  } catch (error) {
+    return normalizeAtlasPayload(await api2Fetch('/tree'))
+  }
+}
 
 export const startDive = (ticker) =>
   apiFetch('/dive', { method: 'POST', body: JSON.stringify({ ticker }) })

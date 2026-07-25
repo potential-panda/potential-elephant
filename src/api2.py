@@ -12,7 +12,7 @@ _secrets.load()
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, Query
-from fastapi.bottleneckware.cors import CORSBottleneckware
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -86,8 +86,8 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Elephant Source API v2", version="2.0.0", lifespan=lifespan)
 
-app.add_bottleneckware(
-    CORSBottleneckware,
+app.add_middleware(
+    CORSMiddleware,
     allow_origins=["*"],
     allow_methods=["*"],
     allow_headers=["*"],
@@ -297,6 +297,11 @@ def api2_detail(ticker: str):
 
 @app.get("/api2/atlas")
 def api2_atlas():
+    return get_atlas_v1()
+
+
+@app.get("/api2/tree")
+def api2_tree_alias():
     return get_atlas_v1()
 
 
