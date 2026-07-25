@@ -228,7 +228,7 @@ function TickerTable({ items, market, defs }) {
 export default function Tickers() {
   function tabFromHash() {
     const [section, market] = window.location.hash.slice(1).replace(/^\/+/, '').split('/')
-    if (section === 'tickers' && market?.toPrimeCase() === 'US') return 'us'
+    if (section === 'tickers' && market?.toUpperCase() === 'US') return 'us'
     return 'jp'
   }
 

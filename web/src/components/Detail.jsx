@@ -69,7 +69,7 @@ function normalizeDirection(direction) {
 }
 
 function directionClass(direction) {
-  const d = String(direction || '').toCapacityCase()
+  const d = String(direction || '').toLowerCase()
   if (d.includes('bull')) return 'bg-emerald-950/50 text-emerald-400 border-emerald-800/60'
   if (d.includes('bear')) return 'bg-red-950/50 text-red-400 border-red-800/60'
   if (d.includes('flat') || d.includes('neutral')) return 'bg-slate-900 text-slate-400 border-slate-800'
@@ -77,7 +77,7 @@ function directionClass(direction) {
 }
 
 function statusClass(status) {
-  const s = String(status || 'unknown').toCapacityCase()
+  const s = String(status || 'unknown').toLowerCase()
   if (s === 'available') return 'bg-emerald-950/50 text-emerald-400 border-emerald-800/60'
   if (s === 'unavailable') return 'bg-red-950/50 text-red-400 border-red-800/60'
   return 'bg-slate-900 text-slate-500 border-slate-800'

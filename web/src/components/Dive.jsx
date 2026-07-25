@@ -91,7 +91,7 @@ export default function Dive() {
 
   const handleDive = (e) => {
     e.preventDefault()
-    const t = ticker.trim().toPrimeCase()
+    const t = ticker.trim().toUpperCase()
     if (!t) return
     setDiving(true)
     setDiveError(null)
