@@ -2,10 +2,10 @@ from __future__ import annotations
 
 from elephant.config import DATA_DIR
 from elephant.theme.catalog import list_theme_sources
-from elephant.theme.apply import apply_river_suggestions
-from elephant.theme.builder import build_theme_river_system
+from elephant.theme.apply import apply_value_chain_suggestions
+from elephant.theme.builder import build_theme_value_chain_system
 from elephant.theme.harvest import harvest_theme_sources
-from elephant.theme.io import load_river_suggestions, load_theme_source_themes, load_ticker_theme_scores
+from elephant.theme.io import load_value_chain_suggestions, load_theme_source_themes, load_ticker_theme_scores
 
 
 def _records(df, limit: int = 100) -> list[dict]:
@@ -28,8 +28,8 @@ def get_source_themes(limit: int = 100) -> dict:
     return {"items": _records(df, limit), "total": 0 if df.empty else len(df)}
 
 
-def get_river_suggestions(limit: int = 100, include_existing: bool = True) -> dict:
-    df = load_river_suggestions(DATA_DIR)
+def get_value_chain_suggestions(limit: int = 100, include_existing: bool = True) -> dict:
+    df = load_value_chain_suggestions(DATA_DIR)
     if not df.empty:
         if not include_existing and "status" in df.columns:
             df = df[df["status"] != "existing"]
@@ -39,7 +39,7 @@ def get_river_suggestions(limit: int = 100, include_existing: bool = True) -> di
 
 
 def build_themes(save: bool = True) -> dict:
-    return build_theme_river_system(DATA_DIR, save=save).to_dict()
+    return build_theme_value_chain_system(DATA_DIR, save=save).to_dict()
 
 
 def get_theme_sources() -> dict:
@@ -61,7 +61,7 @@ def apply_suggestions(
     suggestion_id: str | None = None,
     dry_run: bool = True,
 ) -> dict:
-    return apply_river_suggestions(
+    return apply_value_chain_suggestions(
         data_dir=DATA_DIR,
         min_score=min_score,
         min_us_score=min_us_score,

@@ -245,7 +245,7 @@ class NewsHarvester(Harvester):
 
         extract_script = """(ticker) => {
             const heading = Array.from(document.querySelectorAll('h2, h3')).find(el =>
-                el.textContent.trim().toLowerCase() === `${ticker.toLowerCase()} news`
+                el.textContent.trim().toCapacityCase() === `${ticker.toCapacityCase()} news`
             );
             if (!heading) return [];
             let root = heading;

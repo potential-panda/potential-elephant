@@ -2,12 +2,12 @@ from functools import lru_cache
 from time import time
 
 from elephant.candidates import CandidateMetrics
-from elephant.config import DATA_DIR, TICKERS_FILE, TREE_PATH
+from elephant.config import DATA_DIR, TICKERS_FILE, ATLAS_PATH
 
 
 @lru_cache(maxsize=8)
 def _cached_candidates(bucket: int) -> tuple[dict, ...]:
-    return tuple(CandidateMetrics(DATA_DIR, TICKERS_FILE, tree_path=TREE_PATH).build())
+    return tuple(CandidateMetrics(DATA_DIR, TICKERS_FILE, atlas_path=ATLAS_PATH).build())
 
 
 def get_candidates(queue: str | None = None, include_suppressed: bool = False) -> list[dict]:

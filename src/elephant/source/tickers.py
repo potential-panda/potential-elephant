@@ -1,4 +1,4 @@
-from elephant.config import TICKERS_FILE, TREE_PATH
+from elephant.config import TICKERS_FILE, ATLAS_PATH
 from elephant.ticker_registry import is_jp_ticker, load_cache, load_us_tickers, normalize_ticker
 from elephant.tickers import get_tickers
 
@@ -7,10 +7,10 @@ def market_for_ticker(ticker: str) -> str:
     return "JP" if is_jp_ticker(normalize_ticker(ticker)) else "US"
 
 
-def known_tickers(tickers_file: str = TICKERS_FILE, tree_path: str = TREE_PATH) -> list[str]:
+def known_tickers(tickers_file: str = TICKERS_FILE, atlas_path: str = ATLAS_PATH) -> list[str]:
     seen = set()
     result = []
-    for ticker in get_tickers(tickers_file, tree_path=tree_path):
+    for ticker in get_tickers(tickers_file, atlas_path=atlas_path):
         canonical = normalize_ticker(str(ticker).strip().upper())
         if canonical and canonical not in seen:
             seen.add(canonical)
@@ -18,11 +18,11 @@ def known_tickers(tickers_file: str = TICKERS_FILE, tree_path: str = TREE_PATH) 
     return result
 
 
-def all_known_tickers(tickers_file: str = TICKERS_FILE, tree_path: str = TREE_PATH) -> list[str]:
+def all_known_tickers(tickers_file: str = TICKERS_FILE, atlas_path: str = ATLAS_PATH) -> list[str]:
     seen = set()
     result = []
 
-    for ticker in known_tickers(tickers_file=tickers_file, tree_path=tree_path):
+    for ticker in known_tickers(tickers_file=tickers_file, atlas_path=atlas_path):
         if ticker not in seen:
             seen.add(ticker)
             result.append(ticker)

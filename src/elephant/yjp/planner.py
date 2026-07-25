@@ -8,10 +8,10 @@ from elephant.yjp.harvester import YahooFinanceHarvester
 
 
 class YahooFinancePlanner(Planner):
-    def __init__(self, store: Store, tickers_file: str, tree_path: str = None):
+    def __init__(self, store: Store, tickers_file: str, atlas_path: str = None):
         self.store = store
         self.tickers_file = tickers_file
-        self.tree_path = tree_path
+        self.atlas_path = atlas_path
 
     def create(self) -> List[HarvesterTask]:
         from elephant.config import SOURCE_REGISTRY_FILE
@@ -38,7 +38,7 @@ class YahooFinancePlanner(Planner):
             return tasks
 
         from elephant.ticker_registry import is_jp_ticker, load_cache, get_yahoo_jp_bbs_status, load_us_tickers
-        all_tickers = get_tickers(self.tickers_file, tree_path=self.tree_path)
+        all_tickers = get_tickers(self.tickers_file, atlas_path=self.atlas_path)
 
         # tickers.txt (JP) and tickers-us.txt (confirmed US) together define
         # the daily scraping plan. tickers-us.txt is authoritative when a
@@ -52,7 +52,7 @@ class YahooFinancePlanner(Planner):
         # JP tickers: always include (sourced from BBS ranking)
         jp_tickers = [t for t in all_tickers if is_jp_ticker(t)]
 
-        # US tickers: tree names are probed for Yahoo JP BBS availability.
+        # US tickers: atlas names are probed for Yahoo JP BBS availability.
         # Once confirmed in tickers-us.txt, scrape them with the same depth
         # as JP tickers. Confirmed-no (bbs=False) tickers are skipped.
         us_confirmed_tickers = []
@@ -93,7 +93,7 @@ class YahooFinancePlanner(Planner):
                 args={"max_pages": 10, "max_comments": 200},
             ))
 
-        # Unprobed US tree tickers: lighter scrape to discover BBS availability.
+        # Unprobed US atlas tickers: lighter scrape to discover BBS availability.
         us_start = len(full_tickers)
         for i, ticker in enumerate(us_probe_tickers):
             random_min = available_minutes[(us_start + i) % len(available_minutes)]

@@ -8,10 +8,10 @@ from elephant.tickers import get_tickers
 
 
 class MinkabuPlanner(Planner):
-    def __init__(self, store: Store, tickers_file: str, tree_path: str = None):
+    def __init__(self, store: Store, tickers_file: str, atlas_path: str = None):
         self.store = store
         self.tickers_file = tickers_file
-        self.tree_path = tree_path
+        self.atlas_path = atlas_path
 
     def create(self) -> List[HarvesterTask]:
         from elephant.config import SOURCE_REGISTRY_FILE
@@ -38,7 +38,7 @@ class MinkabuPlanner(Planner):
             return tasks
 
         from elephant.ticker_registry import is_jp_ticker, load_cache, get_minkabu_us_status, load_us_tickers
-        all_tickers = get_tickers(self.tickers_file, tree_path=self.tree_path)
+        all_tickers = get_tickers(self.tickers_file, atlas_path=self.atlas_path)
 
         # tickers.txt (JP) and tickers-us.txt (confirmed US) together define
         # the daily scraping plan. Cache fallback covers confirmed-no

@@ -51,11 +51,11 @@ def list_digests() -> list[dict]:
 def generate_digest(job_id: str) -> None:
     _jobs[job_id] = {"status": "running", "result": None, "error": None}
     try:
-        from elephant.river.tree import RiverTree
+        from elephant.atlas.atlas import Atlas
         from elephant.synthesizer import Synthesizer
-        tree_path = os.path.join(DATA_DIR, "river_tree.json")
-        tree = RiverTree(tree_path)
-        synth = Synthesizer(DATA_DIR, TICKERS_FILE, tree=tree)
+        atlas_path = os.path.join(DATA_DIR, "atlas.json")
+        atlas = Atlas(atlas_path)
+        synth = Synthesizer(DATA_DIR, TICKERS_FILE, atlas=atlas)
         digest = synth.generate()
 
         DIGESTS_DIR.mkdir(exist_ok=True)

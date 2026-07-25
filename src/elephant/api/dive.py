@@ -41,10 +41,10 @@ def run_dive(job_id: str, ticker: str) -> None:
     try:
         from elephant.diver import Diver
         from elephant.formatter import to_html
-        from elephant.river.tree import RiverTree
+        from elephant.atlas.atlas import Atlas
 
-        tree = RiverTree(os.path.join(DATA_DIR, "river_tree.json"))
-        diver = Diver(DATA_DIR, tree=tree)
+        atlas = Atlas(os.path.join(DATA_DIR, "atlas.json"))
+        diver = Diver(DATA_DIR, atlas=atlas)
         brief = diver.dive(ticker)
 
         DIVES_DIR.mkdir(exist_ok=True)

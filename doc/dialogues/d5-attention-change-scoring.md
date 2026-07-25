@@ -55,7 +55,7 @@ Relevant files to inspect (read these, do not assume from memory):
 - `/home/lulurun/workspace/potential-elephant/src/elephant/ticker_registry.py`
   — `get_yahoo_jp_bbs_status()`, how US tickers get probed for a Yahoo JP BBS
   page at all.
-- `/home/lulurun/workspace/potential-elephant/doc/river_framework.md` and
+- `/home/lulurun/workspace/potential-elephant/doc/value_chain_framework.md` and
   `/home/lulurun/workspace/potential-elephant/STRATEGY.md` for the broader
   scoring philosophy (research-worthiness, not stock merit).
 - Current uncommitted diff in this repo already touches US-ticker BBS

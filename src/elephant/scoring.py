@@ -15,7 +15,7 @@ from elephant.scoring_config import (
     D1_APPROVED_PRIMARY, D1_APPROVED_SECONDARY, D1_PROPOSED_WITH_EVIDENCE,
     D1_MINKABU_THEME_MATCH, D1_KEYWORD_ROUTING,
     D2_PEER_MOMENTUM_PTS, D2_PEER_MOMENTUM_MIN_COUNT, D2_PEER_MOMENTUM_THRESHOLD,
-    D2_THIN_LAYER_PTS, D2_THIN_LAYER_THRESHOLD, D2_NOT_CROWDED_PTS, D2_MAX,
+    D2_THIN_STAGE_PTS, D2_THIN_STAGE_THRESHOLD, D2_NOT_CROWDED_PTS, D2_MAX,
     D3_MIN_PEER_COUNT, D3_POINTS_4W_MULT, D3_POINTS_4W_CAP,
     D3_POINTS_12W_MULT, D3_POINTS_12W_CAP, D3_MAX,
     D4_MAX, D4_FRESHNESS_DAYS, D4_RAW_TDNET_MAJOR, D4_RAW_TDNET_MINOR,
@@ -40,16 +40,16 @@ from elephant.scoring_config import (
 
 
 def score_d1(
-    node_status: Optional[str],
-    is_primary_river: bool = True,
+    company_status: Optional[str],
+    is_primary_value_chain: bool = True,
     has_proposed_evidence: bool = False,
     has_minkabu_theme: bool = False,
     has_keyword_routing: bool = False,
 ) -> int:
-    """River fit score (0-25). Use highest applicable tier only, do not sum."""
-    if node_status in ("active", "weak", "watch"):
-        return D1_APPROVED_PRIMARY if is_primary_river else D1_APPROVED_SECONDARY
-    if node_status == "proposed" and has_proposed_evidence:
+    """Value Chain fit score (0-25). Use highest applicable tier only, do not sum."""
+    if company_status in ("active", "weak", "watch"):
+        return D1_APPROVED_PRIMARY if is_primary_value_chain else D1_APPROVED_SECONDARY
+    if company_status == "proposed" and has_proposed_evidence:
         return D1_PROPOSED_WITH_EVIDENCE
     if has_minkabu_theme:
         return D1_MINKABU_THEME_MATCH
@@ -60,18 +60,18 @@ def score_d1(
 
 def score_d2(
     peer_4w_returns: list[float],
-    active_weak_node_count: int,
+    active_weak_company_count: int,
     has_minkabu: bool,
 ) -> int:
-    """Layer alpha score (0-15, additive)."""
+    """Stage alpha score (0-15, additive)."""
     pts = 0
     # +8 if >= 2 active/weak peers up >= threshold in 4w
     peers_up = sum(1 for r in peer_4w_returns if r is not None and r >= D2_PEER_MOMENTUM_THRESHOLD)
     if peers_up >= D2_PEER_MOMENTUM_MIN_COUNT:
         pts += D2_PEER_MOMENTUM_PTS
-    # +5 if layer has < 3 active/weak nodes (thin layer bonus)
-    if active_weak_node_count < D2_THIN_LAYER_THRESHOLD:
-        pts += D2_THIN_LAYER_PTS
+    # +5 if stage has < 3 active/weak companies (thin stage bonus)
+    if active_weak_company_count < D2_THIN_STAGE_THRESHOLD:
+        pts += D2_THIN_STAGE_PTS
     # +2 if not crowded (v1 proxy: no Minkabu coverage)
     if not has_minkabu:
         pts += D2_NOT_CROWDED_PTS
@@ -108,7 +108,7 @@ def score_d3(
 
 def _classify_tdnet_title(title: str) -> int:
     """Returns raw points for a TDnet disclosure based on title keyword match."""
-    title_lower = title.lower()
+    lowercase_title = title.lower()
     for keyword in MAJOR_DISCLOSURE_KEYWORDS:
         if keyword in title:
             return D4_RAW_TDNET_MAJOR

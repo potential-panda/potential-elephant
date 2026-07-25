@@ -1,18 +1,18 @@
 # v1 scoring constants — all values are calibration targets, not permanent product truth.
 
-# D1 river_fit_score point table
+# D1 value_chain_fit_score point table
 D1_APPROVED_PRIMARY = 25
 D1_APPROVED_SECONDARY = 20
 D1_PROPOSED_WITH_EVIDENCE = 18
 D1_MINKABU_THEME_MATCH = 15
 D1_KEYWORD_ROUTING = 8
 
-# D2 layer_alpha_score additive conditions
+# D2 stage_alpha_score additive conditions
 D2_PEER_MOMENTUM_PTS = 8      # >= 2 active/weak peers up >= 7% in 4w
 D2_PEER_MOMENTUM_MIN_COUNT = 2
 D2_PEER_MOMENTUM_THRESHOLD = 7.0  # percent
-D2_THIN_LAYER_PTS = 5         # layer has < 3 active/weak nodes
-D2_THIN_LAYER_THRESHOLD = 3
+D2_THIN_STAGE_PTS = 5         # stage has < 3 active/weak companies
+D2_THIN_STAGE_THRESHOLD = 3
 D2_NOT_CROWDED_PTS = 2        # v1 proxy: no Minkabu coverage
 D2_MAX = 15
 
@@ -50,7 +50,7 @@ MAJOR_DISCLOSURE_KEYWORDS = [
 D5_JP_BBS_TOP_RANK_PTS = 2
 D5_JP_BBS_TOP_RANK_THRESHOLD = 30
 
-# Current velocity level, tiered per market (US BBS volume is structurally lower)
+# Current velocity level, tiered per market (US BBS volume is structurally low)
 D5_JP_BBS_VELOCITY_MED_PTS = 1
 D5_JP_BBS_VELOCITY_MED_THRESHOLD = 5.0    # comments/hour
 D5_JP_BBS_VELOCITY_HIGH_PTS = 2

@@ -9,15 +9,15 @@ import pandas as pd
 from qate.util.dt_range import DtRange
 
 import elephant.secrets as _secrets
-from elephant.config import DATA_DIR, SOURCE_REGISTRY_FILE, TICKERS_FILE, TREE_PATH
+from elephant.config import DATA_DIR, SOURCE_REGISTRY_FILE, TICKERS_FILE, ATLAS_PATH
 from elephant.framework import HarvesterTask, Planner, Scheduler, Store
 from elephant.minkabu.harvester import MinkabuHarvester
 from elephant.minkabu.planner import MinkabuPlanner
 from elephant.news.harvester import NewsHarvester
 from elephant.news.planner import NewsPlanner
-from elephant.river.discoverer import Discoverer
-from elephant.river.seed import SEED_NODES
-from elephant.river.tree import FRAMEWORK_RIVERS, RiverTree
+from elephant.atlas.discoverer import Discoverer
+from elephant.atlas.seed import SEED_NODES
+from elephant.atlas.atlas import FRAMEWORK_VALUE_CHAINS, Atlas
 from elephant.source_check import SourceAvailabilityHarvester, SourceAvailabilityPlanner
 from elephant.tickers import get_tickers
 from elephant.yjp.harvester import YahooFinanceHarvester
@@ -224,8 +224,8 @@ def query_cmd(args):
 def digest_cmd(args):
     from elephant.synthesizer import Synthesizer
 
-    tree = RiverTree(TREE_PATH)
-    synthesizer = Synthesizer(DATA_DIR, TICKERS_FILE, tree=tree)
+    atlas = Atlas(ATLAS_PATH)
+    synthesizer = Synthesizer(DATA_DIR, TICKERS_FILE, atlas=atlas)
     logging.info("Generating digest...")
     digest = synthesizer.generate()
 
@@ -327,8 +327,8 @@ def dive_cmd(args):
     from elephant.formatter import to_html
 
     ticker = args.ticker
-    tree = RiverTree(TREE_PATH)
-    diver = Diver(DATA_DIR, tree=tree)
+    atlas = Atlas(ATLAS_PATH)
+    diver = Diver(DATA_DIR, atlas=atlas)
 
     logging.info(f"Diving into {ticker}...")
     brief = diver.dive(ticker)
@@ -356,93 +356,93 @@ def dive_cmd(args):
     notify(to_markdown(brief))
 
 
-# --- tree ---
+# --- atlas ---
 
 
-def tree_cmd(args):
-    tree = RiverTree(TREE_PATH)
+def atlas_cmd(args):
+    atlas = Atlas(ATLAS_PATH)
 
-    if args.tree_cmd == "show":
-        print(tree.to_display(river_id=getattr(args, "river", None)))
+    if args.atlas_cmd == "show":
+        print(atlas.to_display(value_chain_id=getattr(args, "value_chain", None)))
 
-    elif args.tree_cmd == "init":
-        existing_rivers = {r.id for r in tree.list_rivers()}
-        added_rivers, added_nodes, updated_nodes = [], [], []
+    elif args.atlas_cmd == "init":
+        existing_value_chains = {r.id for r in atlas.list_value_chains()}
+        added_value_chains, added_companies, updated_companies = [], [], []
 
-        for r in FRAMEWORK_RIVERS:
-            if r["id"] not in existing_rivers:
-                tree.add_river(r["id"], r["name"], r.get("description", ""))
-                added_rivers.append(r["name"])
+        for r in FRAMEWORK_VALUE_CHAINS:
+            if r["id"] not in existing_value_chains:
+                atlas.add_value_chain(r["id"], r["name"], r.get("description", ""))
+                added_value_chains.append(r["name"])
 
-            # Populate nodes from seed data
-            river_obj = tree.get_river(r["id"])
-            existing_tickers = {n.ticker for n in (river_obj.nodes if river_obj else [])}
-            for node in SEED_NODES.get(r["id"], []):
-                if node["ticker"] not in existing_tickers:
+            # Populate companies from seed data
+            value_chain_obj = atlas.get_value_chain(r["id"])
+            existing_tickers = {n.ticker for n in (value_chain_obj.companies if value_chain_obj else [])}
+            for company in SEED_NODES.get(r["id"], []):
+                if company["ticker"] not in existing_tickers:
                     try:
-                        tree.add_node(
-                            river_id=r["id"],
-                            ticker=node["ticker"],
-                            layer=node["layer"],
-                            name=node.get("name", ""),
-                            market=node.get("market", "US"),
-                            role=node.get("role", ""),
+                        atlas.add_company(
+                            value_chain_id=r["id"],
+                            ticker=company["ticker"],
+                            stage=company["stage"],
+                            name=company.get("name", ""),
+                            market=company.get("market", "US"),
+                            role=company.get("role", ""),
                             source="seed",
-                            peer_group=node.get("peer_group", ""),
-                            causal_edge=node.get("causal_edge", ""),
-                            behind_reason=node.get("behind_reason", ""),
-                            competitor_tickers=node.get("competitor_tickers", []),
-                            leader_tickers=node.get("leader_tickers", []),
+                            peer_group=company.get("peer_group", ""),
+                            causal_edge=company.get("causal_edge", ""),
+                            behind_reason=company.get("behind_reason", ""),
+                            competitor_tickers=company.get("competitor_tickers", []),
+                            leader_tickers=company.get("leader_tickers", []),
                         )
-                        added_nodes.append(f"{node['ticker']} ({r['id']})")
+                        added_companies.append(f"{company['ticker']} ({r['id']})")
                     except ValueError:
                         pass  # already exists
                 else:
-                    existing_node = next((n for n in river_obj.nodes if n.ticker == node["ticker"]), None)
+                    existing_company = next((n for n in value_chain_obj.companies if n.ticker == company["ticker"]), None)
                     metadata = {
-                        "peer_group": node.get("peer_group", ""),
-                        "causal_edge": node.get("causal_edge", ""),
-                        "behind_reason": node.get("behind_reason", ""),
-                        "competitor_tickers": node.get("competitor_tickers", []),
-                        "leader_tickers": node.get("leader_tickers", []),
+                        "peer_group": company.get("peer_group", ""),
+                        "causal_edge": company.get("causal_edge", ""),
+                        "behind_reason": company.get("behind_reason", ""),
+                        "competitor_tickers": company.get("competitor_tickers", []),
+                        "leader_tickers": company.get("leader_tickers", []),
                     }
                     missing_metadata = {
                         key: value
                         for key, value in metadata.items()
-                        if value and existing_node is not None and not getattr(existing_node, key, None)
+                        if value and existing_company is not None and not getattr(existing_company, key, None)
                     }
-                    if missing_metadata and tree.update_node(r["id"], node["ticker"], **missing_metadata):
-                        updated_nodes.append(f"{node['ticker']} ({r['id']})")
+                    if missing_metadata and atlas.update_company(r["id"], company["ticker"], **missing_metadata):
+                        updated_companies.append(f"{company['ticker']} ({r['id']})")
 
-        if added_rivers:
-            print(f"Added rivers: {', '.join(added_rivers)}")
-        if added_nodes:
-            print(f"Added {len(added_nodes)} nodes from V1 ticker matrix")
-        if updated_nodes:
-            print(f"Updated {len(updated_nodes)} existing nodes with peer metadata")
-        if not added_rivers and not added_nodes and not updated_nodes:
-            print("River tree already up to date.")
-        print(tree.to_display())
+        if added_value_chains:
+            print(f"Added value_chains: {', '.join(added_value_chains)}")
+        if added_companies:
+            print(f"Added {len(added_companies)} companies from V1 ticker matrix")
+        if updated_companies:
+            print(f"Updated {len(updated_companies)} existing companies with peer metadata")
+        if not added_value_chains and not added_companies and not updated_companies:
+            print("Atlas already up to date.")
+        print(atlas.to_display())
 
-    elif args.tree_cmd == "river-add":
+    elif args.atlas_cmd == "value_chain-add":
         try:
-            tree.add_river(args.id, args.name, getattr(args, "description", "") or "")
-            print(f"Added river: [{args.id}] {args.name}")
+            atlas.add_value_chain(args.id, args.name, getattr(args, "description", "") or "")
+            print(f"Added value_chain: [{args.id}] {args.name}")
         except ValueError as e:
             print(f"Error: {e}")
 
-    elif args.tree_cmd == "river-remove":
-        if tree.remove_river(args.id):
-            print(f"Removed river: {args.id}")
+    elif args.atlas_cmd == "value_chain-remove":
+        if atlas.remove_value_chain(args.id):
+            print(f"Removed value_chain: {args.id}")
         else:
-            print(f"River not found: {args.id}")
+            print(f"Value Chain not found: {args.id}")
 
-    elif args.tree_cmd == "node-add":
+    elif args.atlas_cmd == "company-add":
         try:
-            node = tree.add_node(
-                river_id=args.river,
+            company = atlas.add_company(
+                value_chain_id=args.value_chain,
                 ticker=args.ticker,
-                layer=args.layer,
+                stage=args.stage,
                 name=getattr(args, "name", "") or "",
                 market=getattr(args, "market", "US") or "US",
                 role=getattr(args, "role", "") or "",
@@ -453,33 +453,33 @@ def tree_cmd(args):
                 competitor_tickers=_csv_arg(getattr(args, "competitor_tickers", "")),
                 leader_tickers=_csv_arg(getattr(args, "leader_tickers", "")),
             )
-            print(f"Added node: {node.ticker} [{node.layer}] to river '{args.river}'")
+            print(f"Added company: {company.ticker} [{company.stage}] to value_chain '{args.value_chain}'")
         except ValueError as e:
             print(f"Error: {e}")
 
-    elif args.tree_cmd == "node-update":
+    elif args.atlas_cmd == "company-update":
         kwargs = {
             k: v for k, v in vars(args).items()
-            if k in ("layer", "name", "market", "role", "notes", "peer_group", "causal_edge", "behind_reason")
+            if k in ("stage", "name", "market", "role", "notes", "peer_group", "causal_edge", "behind_reason")
             and v is not None
         }
         if getattr(args, "competitor_tickers", None) is not None:
             kwargs["competitor_tickers"] = _csv_arg(args.competitor_tickers)
         if getattr(args, "leader_tickers", None) is not None:
             kwargs["leader_tickers"] = _csv_arg(args.leader_tickers)
-        if tree.update_node(args.river, args.ticker, **kwargs):
-            print(f"Updated {args.ticker} in river '{args.river}'")
+        if atlas.update_company(args.value_chain, args.ticker, **kwargs):
+            print(f"Updated {args.ticker} in value_chain '{args.value_chain}'")
         else:
-            print(f"Node not found: {args.ticker} in river '{args.river}'")
+            print(f"Company not found: {args.ticker} in value_chain '{args.value_chain}'")
 
-    elif args.tree_cmd == "node-remove":
-        if tree.remove_node(args.river, args.ticker):
-            print(f"Removed {args.ticker} from river '{args.river}'")
+    elif args.atlas_cmd == "company-remove":
+        if atlas.remove_company(args.value_chain, args.ticker):
+            print(f"Removed {args.ticker} from value_chain '{args.value_chain}'")
         else:
-            print(f"Node not found: {args.ticker} in river '{args.river}'")
+            print(f"Company not found: {args.ticker} in value_chain '{args.value_chain}'")
 
-    elif args.tree_cmd == "news-add":
-        tree.add_news(
+    elif args.atlas_cmd == "news-add":
+        atlas.add_news(
             ticker=args.ticker,
             title=args.title,
             url=args.url,
@@ -489,16 +489,16 @@ def tree_cmd(args):
         print(f"Added news for {args.ticker}: {args.title[:60]}")
 
     else:
-        print("Unknown tree command.")
-        print("Use: show, init, river-add, river-remove, node-add, node-update, node-remove, news-add")
+        print("Unknown atlas command.")
+        print("Use: show, init, value_chain-add, value_chain-remove, company-add, company-update, company-remove, news-add")
 
 
 # --- discover ---
 
 
 def discover_cmd(args):
-    tree = RiverTree(TREE_PATH)
-    discoverer = Discoverer(DATA_DIR, TICKERS_FILE, tree)
+    atlas = Atlas(ATLAS_PATH)
+    discoverer = Discoverer(DATA_DIR, TICKERS_FILE, atlas)
 
     if args.ticker:
         # Classify a specific ticker
@@ -508,10 +508,10 @@ def discover_cmd(args):
         if (
             result
             and args.auto
-            and result.get("fits_existing_river")
+            and result.get("fits_existing_value_chain")
             and result.get("confidence") in ("high", "medium")
         ):
-            _auto_add(tree, result)
+            _auto_add(atlas, result)
 
     elif args.keyword:
         # Keyword search → extract tickers → classify
@@ -519,24 +519,24 @@ def discover_cmd(args):
         results = discoverer.classify_keyword(args.keyword)
         for result in results:
             _print_suggestion(result)
-            if args.auto and result.get("fits_existing_river") and result.get("confidence") in ("high", "medium"):
-                _auto_add(tree, result)
+            if args.auto and result.get("fits_existing_value_chain") and result.get("confidence") in ("high", "medium"):
+                _auto_add(atlas, result)
 
     else:
         # Autonomous scan of BBS unknowns
-        print("Scanning BBS hot tickers not yet in the river tree...")
+        print("Scanning BBS hot tickers not yet in the atlas...")
         suggestions = discoverer.scan_unknown_tickers()
         if not suggestions:
             print("No high-confidence suggestions found.")
             return
         for result in suggestions:
             _print_suggestion(result)
-            if args.auto and result.get("fits_existing_river") and result.get("confidence") in ("high", "medium"):
-                _auto_add(tree, result)
+            if args.auto and result.get("fits_existing_value_chain") and result.get("confidence") in ("high", "medium"):
+                _auto_add(atlas, result)
             elif not args.auto:
-                answer = input("Add to tree? [y/n/skip] ").strip().lower()
+                answer = input("Add to atlas? [y/n/skip] ").strip().lower()
                 if answer == "y":
-                    _auto_add(tree, result)
+                    _auto_add(atlas, result)
 
 
 def _print_suggestion(result: dict) -> None:
@@ -544,34 +544,34 @@ def _print_suggestion(result: dict) -> None:
         print("(no classification returned)")
         return
     confidence = result.get("confidence", "?")
-    fits = result.get("fits_existing_river", False)
+    fits = result.get("fits_existing_value_chain", False)
     print(f"\n[SUGGESTION — {confidence} confidence]")
     print(f"Ticker:  {result.get('ticker')} ({result.get('market', '?')})")
     if fits:
-        print(f"River:   {result.get('river_id')}")
-        print(f"Layer:   {result.get('layer')}")
+        print(f"Value Chain:   {result.get('value_chain_id')}")
+        print(f"Stage:   {result.get('stage')}")
     else:
-        new_river = result.get("new_river_name")
+        new_value_chain = result.get("new_value_chain_name")
         print(
-            f"River:   (new river suggested: {new_river})" if new_river else "River:   (does not fit any known river)"
+            f"Value Chain:   (new value_chain suggested: {new_value_chain})" if new_value_chain else "Value Chain:   (does not fit any known value_chain)"
         )
     print(f"Name:    {result.get('name', '')}")
     print(f"Role:    {result.get('role', '')}")
     print(f"Reason:  {result.get('reasoning', '')}")
 
 
-def _auto_add(tree: RiverTree, result: dict) -> None:
+def _auto_add(atlas: Atlas, result: dict) -> None:
     try:
-        node = tree.add_node(
-            river_id=result["river_id"],
+        company = atlas.add_company(
+            value_chain_id=result["value_chain_id"],
             ticker=result["ticker"],
-            layer=result["layer"],
+            stage=result["stage"],
             name=result.get("name", ""),
             market=result.get("market", "US"),
             role=result.get("role", ""),
             source="discovery",
         )
-        print(f"  -> Added {node.ticker} [{node.layer}] to river '{result['river_id']}'")
+        print(f"  -> Added {company.ticker} [{company.stage}] to value_chain '{result['value_chain_id']}'")
     except ValueError as e:
         print(f"  -> Could not add: {e}")
 
@@ -634,7 +634,7 @@ def sources_cmd(args):
 
     if args.sources_cmd == "check":
         if args.all:
-            tickers = get_tickers(TICKERS_FILE, tree_path=TREE_PATH)
+            tickers = get_tickers(TICKERS_FILE, atlas_path=ATLAS_PATH)
         elif args.ticker:
             tickers = [normalize_ticker(args.ticker)]
         else:
@@ -697,12 +697,12 @@ def schedule_cmd(args):
     store = Store(DATA_DIR)
 
     bbs_rank_planner = BbsRankPlanner(store, TICKERS_FILE)
-    yjp_planner = YahooFinancePlanner(store, TICKERS_FILE, tree_path=TREE_PATH)
-    minkabu_planner = MinkabuPlanner(store, TICKERS_FILE, tree_path=TREE_PATH)
+    yjp_planner = YahooFinancePlanner(store, TICKERS_FILE, atlas_path=ATLAS_PATH)
+    minkabu_planner = MinkabuPlanner(store, TICKERS_FILE, atlas_path=ATLAS_PATH)
     news_planner = NewsPlanner(store)
     tdnet_planner = TDnetPlanner(store)
-    price_planner = PricePlanner(store, TICKERS_FILE, tree_path=TREE_PATH)
-    source_availability_planner = SourceAvailabilityPlanner(store, TICKERS_FILE, tree_path=TREE_PATH)
+    price_planner = PricePlanner(store, TICKERS_FILE, atlas_path=ATLAS_PATH)
+    source_availability_planner = SourceAvailabilityPlanner(store, TICKERS_FILE, atlas_path=ATLAS_PATH)
 
     multi_planner = MultiPlanner([
         bbs_rank_planner,
@@ -785,56 +785,56 @@ def main():
     sources_show = sources_subs.add_parser("show", help="Show source registry")
     sources_show.add_argument("--ticker", help="Canonical ticker to show")
 
-    # tree
-    tree_parser = subparsers.add_parser("tree", help="Manage the river tree knowledge database")
-    tree_subs = tree_parser.add_subparsers(dest="tree_cmd")
+    # atlas
+    atlas_parser = subparsers.add_parser("atlas", help="Manage the atlas knowledge database")
+    atlas_subs = atlas_parser.add_subparsers(dest="atlas_cmd")
 
-    tree_show = tree_subs.add_parser("show", help="Display the tree")
-    tree_show.add_argument("--river", help="Show a specific river by id")
+    atlas_show = atlas_subs.add_parser("show", help="Display the atlas")
+    atlas_show.add_argument("--value_chain", help="Show a specific value_chain by id")
 
-    tree_subs.add_parser("init", help="Seed the tree with the 4 framework rivers")
+    atlas_subs.add_parser("init", help="Seed the atlas with the 4 framework value_chains")
 
-    river_add = tree_subs.add_parser("river-add", help="Add a new river")
-    river_add.add_argument("--id", required=True)
-    river_add.add_argument("--name", required=True)
-    river_add.add_argument("--description", default="")
+    value_chain_add = atlas_subs.add_parser("value_chain-add", help="Add a new value_chain")
+    value_chain_add.add_argument("--id", required=True)
+    value_chain_add.add_argument("--name", required=True)
+    value_chain_add.add_argument("--description", default="")
 
-    river_rm = tree_subs.add_parser("river-remove", help="Remove a river")
-    river_rm.add_argument("--id", required=True)
+    value_chain_rm = atlas_subs.add_parser("value_chain-remove", help="Remove a value_chain")
+    value_chain_rm.add_argument("--id", required=True)
 
-    node_add = tree_subs.add_parser("node-add", help="Add a node to a river")
-    node_add.add_argument("--river", required=True)
-    node_add.add_argument("--ticker", required=True)
-    node_add.add_argument("--layer", required=True, choices=["source", "upper", "middle", "lower"])
-    node_add.add_argument("--name", default="")
-    node_add.add_argument("--market", default="US", choices=["US", "JP"])
-    node_add.add_argument("--role", default="")
-    node_add.add_argument("--notes", default="")
-    node_add.add_argument("--peer-group", default="", dest="peer_group")
-    node_add.add_argument("--causal-edge", default="", dest="causal_edge")
-    node_add.add_argument("--behind-reason", default="", dest="behind_reason")
-    node_add.add_argument("--competitor-tickers", default="", dest="competitor_tickers")
-    node_add.add_argument("--leader-tickers", default="", dest="leader_tickers")
+    company_add = atlas_subs.add_parser("company-add", help="Add a company to a value_chain")
+    company_add.add_argument("--value_chain", required=True)
+    company_add.add_argument("--ticker", required=True)
+    company_add.add_argument("--stage", required=True, choices=["driver", "prime", "bottleneck", "capacity"])
+    company_add.add_argument("--name", default="")
+    company_add.add_argument("--market", default="US", choices=["US", "JP"])
+    company_add.add_argument("--role", default="")
+    company_add.add_argument("--notes", default="")
+    company_add.add_argument("--peer-group", default="", dest="peer_group")
+    company_add.add_argument("--causal-edge", default="", dest="causal_edge")
+    company_add.add_argument("--behind-reason", default="", dest="behind_reason")
+    company_add.add_argument("--competitor-tickers", default="", dest="competitor_tickers")
+    company_add.add_argument("--leader-tickers", default="", dest="leader_tickers")
 
-    node_upd = tree_subs.add_parser("node-update", help="Update a node")
-    node_upd.add_argument("--river", required=True)
-    node_upd.add_argument("--ticker", required=True)
-    node_upd.add_argument("--layer", choices=["source", "upper", "middle", "lower"])
-    node_upd.add_argument("--name")
-    node_upd.add_argument("--market", choices=["US", "JP"])
-    node_upd.add_argument("--role")
-    node_upd.add_argument("--notes")
-    node_upd.add_argument("--peer-group", dest="peer_group")
-    node_upd.add_argument("--causal-edge", dest="causal_edge")
-    node_upd.add_argument("--behind-reason", dest="behind_reason")
-    node_upd.add_argument("--competitor-tickers", dest="competitor_tickers")
-    node_upd.add_argument("--leader-tickers", dest="leader_tickers")
+    company_upd = atlas_subs.add_parser("company-update", help="Update a company")
+    company_upd.add_argument("--value_chain", required=True)
+    company_upd.add_argument("--ticker", required=True)
+    company_upd.add_argument("--stage", choices=["driver", "prime", "bottleneck", "capacity"])
+    company_upd.add_argument("--name")
+    company_upd.add_argument("--market", choices=["US", "JP"])
+    company_upd.add_argument("--role")
+    company_upd.add_argument("--notes")
+    company_upd.add_argument("--peer-group", dest="peer_group")
+    company_upd.add_argument("--causal-edge", dest="causal_edge")
+    company_upd.add_argument("--behind-reason", dest="behind_reason")
+    company_upd.add_argument("--competitor-tickers", dest="competitor_tickers")
+    company_upd.add_argument("--leader-tickers", dest="leader_tickers")
 
-    node_rm = tree_subs.add_parser("node-remove", help="Remove a node")
-    node_rm.add_argument("--river", required=True)
-    node_rm.add_argument("--ticker", required=True)
+    company_rm = atlas_subs.add_parser("company-remove", help="Remove a company")
+    company_rm.add_argument("--value_chain", required=True)
+    company_rm.add_argument("--ticker", required=True)
 
-    news_add = tree_subs.add_parser("news-add", help="Tag a news item to a ticker")
+    news_add = atlas_subs.add_parser("news-add", help="Tag a news item to a ticker")
     news_add.add_argument("--ticker", required=True)
     news_add.add_argument("--title", required=True)
     news_add.add_argument("--url", required=True)
@@ -842,7 +842,7 @@ def main():
     news_add.add_argument("--date")
 
     # discover
-    discover_parser = subparsers.add_parser("discover", help="Discover and classify tickers into the river tree")
+    discover_parser = subparsers.add_parser("discover", help="Discover and classify tickers into the atlas")
     discover_parser.add_argument("--ticker", help="Classify a specific ticker")
     discover_parser.add_argument("--keyword", help="Search news for keyword and classify found tickers")
     discover_parser.add_argument("--auto", action="store_true", help="Auto-add high-confidence suggestions")
@@ -853,12 +853,12 @@ def main():
     tickers_parser = subparsers.add_parser("tickers", help="List tickers with harvested data in the last N days")
     tickers_parser.add_argument("--days", type=int, default=14, help="Lookback window in days (default: 14)")
 
-    decision_parser = subparsers.add_parser("decision", help="Record or review pass/watch/river_candidate decisions")
+    decision_parser = subparsers.add_parser("decision", help="Record or review pass/watch/value_chain_candidate decisions")
     decision_subs = decision_parser.add_subparsers(dest="decision_cmd")
 
     dec_record = decision_subs.add_parser("record", help="Record a decision for a ticker")
     dec_record.add_argument("--ticker", required=True)
-    dec_record.add_argument("--decision", required=True, choices=["pass", "watch", "river_candidate"])
+    dec_record.add_argument("--decision", required=True, choices=["pass", "watch", "value_chain_candidate"])
     dec_record.add_argument("--reason", default="")
     dec_record.add_argument("--suppress-days", type=int, default=30, dest="suppress_days",
                             help="Days to suppress (for pass decisions, default 30)")
@@ -881,8 +881,8 @@ def main():
         schedule_cmd(args)
     elif args.command == "sources":
         sources_cmd(args)
-    elif args.command == "tree":
-        tree_cmd(args)
+    elif args.command == "atlas":
+        atlas_cmd(args)
     elif args.command == "discover":
         discover_cmd(args)
     elif args.command == "dive":

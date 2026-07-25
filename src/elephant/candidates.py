@@ -1,16 +1,16 @@
 """
 Candidate metrics builder.
 
-Joins BBS heat + sentiment + river fit + laggard gap + catalyst into one
+Joins BBS heat + sentiment + value_chain fit + laggard gap + catalyst into one
 deterministic table. The synthesizer uses this table instead of raw BBS data
 so the LLM receives pre-ranked, queue-split candidates rather than noise.
 
 Queue definitions:
-  A — River Candidate: in a confirmed river AND lagging peers, or in a river
+  A — Value Chain Candidate: in a confirmed value_chain AND lagging peers, or in a value_chain
       with active BBS heat. Deserves research time.
   B — Holding Signal: monitored ticker, price down recently but sentiment
       still intact. Worth checking whether thesis holds.
-  C — Crowd Heat / Noise: high BBS activity but no confirmed river fit.
+  C — Crowd Heat / Noise: high BBS activity but no confirmed value_chain fit.
       Surface for awareness, not for research priority.
 """
 
@@ -64,7 +64,7 @@ def _safe_float(value, default: float = 0.0) -> float:
 
 def _priority_signal_families(
     *,
-    river_id: Optional[str],
+    value_chain_id: Optional[str],
     bbs_rank: Optional[int],
     speed_latest: Optional[float],
     bull_pct: Optional[float],
@@ -73,7 +73,7 @@ def _priority_signal_families(
     has_minkabu: bool,
 ) -> list[str]:
     families = []
-    if river_id:
+    if value_chain_id:
         families.append("setup")
     if bbs_rank is not None or speed_latest is not None:
         families.append("attention")
@@ -125,7 +125,7 @@ def _priority_bonus(
             catalyst_title = str(title).strip()
             break
     if "setup" in signal_families:
-        parts.append("river fit")
+        parts.append("value_chain fit")
     if "catalyst" in signal_families:
         parts.append(f"catalyst: {catalyst_title[:60]}" if catalyst_title else "catalyst")
     if "attention" in signal_families:
@@ -147,10 +147,10 @@ def _priority_bonus(
 
 
 class CandidateMetrics:
-    def __init__(self, data_dir: str, tickers_file: str, tree_path: Optional[str] = None):
+    def __init__(self, data_dir: str, tickers_file: str, atlas_path: Optional[str] = None):
         self.data_dir = data_dir
         self.tickers_file = tickers_file
-        self.tree_path = tree_path
+        self.atlas_path = atlas_path
 
     # ── loaders ───────────────────────────────────────────────────────────────
 
@@ -286,64 +286,64 @@ class CandidateMetrics:
         except Exception:
             return {}
 
-    def _load_river_tree(self) -> dict[str, dict]:
+    def _load_atlas(self) -> dict[str, dict]:
         """
-        {ticker: {river_id, river_name, layer, peer_group, status, primary_river}}
-        First occurrence wins when a ticker appears in multiple rivers.
-        Dormant/rejected nodes are preserved in the tree but excluded from daily
+        {ticker: {value_chain_id, value_chain_name, stage, peer_group, status, primary_value_chain}}
+        First occurrence wins when a ticker appears in multiple value_chains.
+        Dormant/rejected companies are preserved in the atlas but excluded from daily
         candidate scoring.
         """
-        if not self.tree_path or not os.path.exists(self.tree_path):
+        if not self.atlas_path or not os.path.exists(self.atlas_path):
             return {}
-        with open(self.tree_path, encoding="utf-8") as f:
+        with open(self.atlas_path, encoding="utf-8") as f:
             data = json.load(f)
         result = {}
-        for river in data.get("rivers", []):
-            for node in river.get("nodes", []):
-                status = node.get("status", "active")
+        for value_chain in data.get("value_chains", []):
+            for company in value_chain.get("companies", []):
+                status = company.get("status", "active")
                 if status in {"dormant", "rejected"}:
                     continue
-                t = node["ticker"]
+                t = company["ticker"]
                 if t not in result:
                     result[t] = {
-                        "river_id": river["id"],
-                        "river_name": river["name"],
-                        "layer": node["layer"],
-                        "peer_group": node.get("peer_group", ""),
-                        "causal_edge": node.get("causal_edge", ""),
-                        "behind_reason": node.get("behind_reason", ""),
-                        "competitor_tickers": node.get("competitor_tickers", []),
-                        "leader_tickers": node.get("leader_tickers", []),
+                        "value_chain_id": value_chain["id"],
+                        "value_chain_name": value_chain["name"],
+                        "stage": company["stage"],
+                        "peer_group": company.get("peer_group", ""),
+                        "causal_edge": company.get("causal_edge", ""),
+                        "behind_reason": company.get("behind_reason", ""),
+                        "competitor_tickers": company.get("competitor_tickers", []),
+                        "leader_tickers": company.get("leader_tickers", []),
                         "status": status,
-                        "primary_river": node.get("primary_river", True),
+                        "primary_value_chain": company.get("primary_value_chain", True),
                     }
         return result
 
-    def _compute_layer_avgs(self, all_prices: dict[str, dict]) -> dict[tuple, dict]:
+    def _compute_stage_avgs(self, all_prices: dict[str, dict]) -> dict[tuple, dict]:
         """
-        {(river_id, layer): {avg_1y, avg_6m, avg_3m, avg_1m}}
-        Uses all nodes in the tree for computing the average.
+        {(value_chain_id, stage): {avg_1y, avg_6m, avg_3m, avg_1m}}
+        Uses all companies in the atlas for computing the average.
         """
-        if not self.tree_path or not os.path.exists(self.tree_path):
+        if not self.atlas_path or not os.path.exists(self.atlas_path):
             return {}
-        with open(self.tree_path, encoding="utf-8") as f:
+        with open(self.atlas_path, encoding="utf-8") as f:
             data = json.load(f)
 
         groups: dict[tuple, list[str]] = {}
-        for river in data.get("rivers", []):
-            for node in river.get("nodes", []):
-                node_status = node.get("status", "active")
-                if node_status in ("active", "weak"):
-                    key = (river["id"], node["layer"])
-                    groups.setdefault(key, []).append(node["ticker"])
+        for value_chain in data.get("value_chains", []):
+            for company in value_chain.get("companies", []):
+                company_status = company.get("status", "active")
+                if company_status in ("active", "weak"):
+                    key = (value_chain["id"], company["stage"])
+                    groups.setdefault(key, []).append(company["ticker"])
 
         result = {}
-        for key, tickers_in_layer in groups.items():
+        for key, tickers_in_stage in groups.items():
             avgs = {}
             for period in ("1y", "6m", "3m", "1m", "4w", "12w"):
                 vals = [
                     all_prices[t][period]
-                    for t in tickers_in_layer
+                    for t in tickers_in_stage
                     if t in all_prices
                     and all_prices[t].get(period) is not None
                     and math.isfinite(all_prices[t][period])
@@ -354,23 +354,23 @@ class CandidateMetrics:
 
     def _compute_peer_group_avgs(self, all_prices: dict[str, dict]) -> dict[tuple, dict]:
         """
-        {(river_id, peer_group): {median_1y, median_6m, median_3m, median_1m, count}}
-        Uses active/weak nodes only. Empty peer_group values are ignored so the
-        layer benchmark remains the fallback for older tree data.
+        {(value_chain_id, peer_group): {median_1y, median_6m, median_3m, median_1m, count}}
+        Uses active/weak companies only. Empty peer_group values are ignored so the
+        stage benchmark remains the fallback for older atlas data.
         """
-        if not self.tree_path or not os.path.exists(self.tree_path):
+        if not self.atlas_path or not os.path.exists(self.atlas_path):
             return {}
-        with open(self.tree_path, encoding="utf-8") as f:
+        with open(self.atlas_path, encoding="utf-8") as f:
             data = json.load(f)
 
         groups: dict[tuple, list[str]] = {}
-        for river in data.get("rivers", []):
-            for node in river.get("nodes", []):
-                node_status = node.get("status", "active")
-                peer_group = node.get("peer_group") or ""
-                if node_status in ("active", "weak") and peer_group:
-                    key = (river["id"], peer_group)
-                    groups.setdefault(key, []).append(node["ticker"])
+        for value_chain in data.get("value_chains", []):
+            for company in value_chain.get("companies", []):
+                company_status = company.get("status", "active")
+                peer_group = company.get("peer_group") or ""
+                if company_status in ("active", "weak") and peer_group:
+                    key = (value_chain["id"], peer_group)
+                    groups.setdefault(key, []).append(company["ticker"])
 
         result = {}
         for key, tickers_in_group in groups.items():
@@ -455,7 +455,7 @@ class CandidateMetrics:
         bull_pct: Optional[float],
         return_1m: Optional[float],
         return_1y: Optional[float],
-        river_id: Optional[str],
+        value_chain_id: Optional[str],
         laggard_gap: Optional[float],
         has_tdnet: bool,
         has_minkabu: bool,
@@ -463,20 +463,20 @@ class CandidateMetrics:
         """Returns (score 0-100, queue 'A'/'B'/'C', human-readable reason).
 
         Score structure (max 100):
-          River fit    40 pts  — presence(15) + gap scale(up to 20) + true-laggard bonus(5)
+          Value Chain fit    40 pts  — presence(15) + gap scale(up to 20) + true-laggard bonus(5)
           Market heat  35 pts  — JP: BBS rank/speed/Minkabu; US: BBS presence/momentum
           Sentiment    15 pts  — Yahoo JP bull% (JP-only currently)
           Catalyst     10 pts  — TDnet (JP) / Minkabu (JP)
 
-        Laggard gap tiers (vs layer 1y avg):
+        Laggard gap tiers (vs stage 1y avg):
           -100%+ → +20   -50%+ → +16   -20%+ → +12   -10%+ → +7   -5%+ → +3
         True laggard bonus (+5): gap ≤ -30% AND 1y return < 15%
           (stock hasn't moved in absolute terms either — best catch-up candidate)
         """
         score = 0
 
-        # ── River fit (max 40) ────────────────────────────────────────────────
-        if river_id:
+        # ── Value Chain fit (max 40) ────────────────────────────────────────────────
+        if value_chain_id:
             score += 15
             if laggard_gap is not None:
                 if laggard_gap <= -100:
@@ -507,7 +507,7 @@ class CandidateMetrics:
                 if has_minkabu:
                     score += 5
             else:
-                score -= 10  # JP in tree but never appeared in BBS — confirmed quiet
+                score -= 10  # JP in atlas but never appeared in BBS — confirmed quiet
         else:
             # US: BBS coverage is rare — presence is a strong signal
             if speed_latest is not None:
@@ -553,21 +553,21 @@ class CandidateMetrics:
         score = min(score, 100)
 
         # ── Queue assignment ─────────────────────────────────────────────────
-        if river_id and laggard_gap is not None and laggard_gap <= -10:
+        if value_chain_id and laggard_gap is not None and laggard_gap <= -10:
             queue = "A"
-            reason = f"river:{river_id} laggard {laggard_gap:+.1f}% vs layer avg"
-        elif river_id and is_today_bbs and bbs_rank is not None and bbs_rank <= 30:
+            reason = f"value_chain:{value_chain_id} laggard {laggard_gap:+.1f}% vs stage avg"
+        elif value_chain_id and is_today_bbs and bbs_rank is not None and bbs_rank <= 30:
             queue = "A"
-            reason = f"river:{river_id} BBS rank {bbs_rank} today"
-        elif river_id and not is_jp and return_1m is not None and return_1m > 15:
+            reason = f"value_chain:{value_chain_id} BBS rank {bbs_rank} today"
+        elif value_chain_id and not is_jp and return_1m is not None and return_1m > 15:
             queue = "A"
-            reason = f"river:{river_id} US momentum {return_1m:+.1f}% 1m"
+            reason = f"value_chain:{value_chain_id} US momentum {return_1m:+.1f}% 1m"
         elif return_1m is not None and return_1m < -5 and bull_pct is not None and bull_pct > 60:
             queue = "B"
             reason = f"price {return_1m:+.1f}% 1m · bull {bull_pct:.0f}%"
         else:
             queue = "C"
-            reason = "crowd heat · no confirmed river fit"
+            reason = "crowd heat · no confirmed value_chain fit"
 
         return score, queue, reason
 
@@ -579,7 +579,7 @@ class CandidateMetrics:
 
         Covers:
           - All tickers from tickers.txt (BBS ranked + recently retained)
-          - All JP tickers from the river tree that aren't already in tickers.txt
+          - All JP tickers from the atlas that aren't already in tickers.txt
             (for laggard detection even when not BBS-hot)
         """
         import json as _json
@@ -593,10 +593,10 @@ class CandidateMetrics:
 
         bbs_tickers = self._load_bbs_tickers()
 
-        # Add all river tree tickers (JP and US) not already in BBS list
-        river_nodes = self._load_river_tree()
-        tree_extra = [t for t in river_nodes if t not in bbs_tickers]
-        all_tickers = bbs_tickers + tree_extra
+        # Add all atlas tickers (JP and US) not already in BBS list
+        value_chain_companies = self._load_atlas()
+        atlas_extra = [t for t in value_chain_companies if t not in bbs_tickers]
+        all_tickers = bbs_tickers + atlas_extra
 
         if not all_tickers:
             return []
@@ -607,19 +607,19 @@ class CandidateMetrics:
         minkabu = self._load_minkabu_available(all_tickers)
         names = self._load_names(all_tickers)
 
-        # Load prices for all tickers (including US tree nodes for layer avg computation)
-        all_tree_tickers = list(river_nodes.keys())
-        price_tickers = list(dict.fromkeys(all_tickers + all_tree_tickers))
+        # Load prices for all tickers (including US atlas companies for stage avg computation)
+        all_atlas_tickers = list(value_chain_companies.keys())
+        price_tickers = list(dict.fromkeys(all_tickers + all_atlas_tickers))
         all_prices = {t: self._load_price_changes(t) for t in price_tickers}
 
-        layer_avgs = self._compute_layer_avgs(all_prices)
+        stage_avgs = self._compute_stage_avgs(all_prices)
         peer_group_avgs = self._compute_peer_group_avgs(all_prices)
 
-        # Load tree data once for D2 peer computation (avoid re-reading per ticker)
-        tree_data_global = {}
-        if self.tree_path and os.path.exists(self.tree_path):
-            with open(self.tree_path, encoding="utf-8") as f:
-                tree_data_global = _json.load(f)
+        # Load atlas data once for D2 peer computation (avoid re-reading per ticker)
+        atlas_data_global = {}
+        if self.atlas_path and os.path.exists(self.atlas_path):
+            with open(self.atlas_path, encoding="utf-8") as f:
+                atlas_data_global = _json.load(f)
 
         # Load BBS cache once for D5 rank history
         from elephant.ticker_registry import load_cache
@@ -630,22 +630,22 @@ class CandidateMetrics:
             b = bbs.get(ticker, {})
             s = senti.get(ticker, {})
             p = all_prices.get(ticker, {})
-            rf = river_nodes.get(ticker)
+            rf = value_chain_companies.get(ticker)
 
             bull_pct = s.get("bull_pct")
             bear_pct = s.get("bear_pct")
 
-            layer_avg_1y = None
+            stage_avg_1y = None
             laggard_gap = None
             peer_group_median_1y = None
             peer_group_laggard_gap = None
             if rf:
-                key = (rf["river_id"], rf["layer"])
-                la = layer_avgs.get(key, {})
-                layer_avg_1y = la.get("avg_1y")
-                if layer_avg_1y is not None and p.get("1y") is not None:
-                    laggard_gap = round(p["1y"] - layer_avg_1y, 2)
-                pg_key = (rf["river_id"], rf.get("peer_group", ""))
+                key = (rf["value_chain_id"], rf["stage"])
+                la = stage_avgs.get(key, {})
+                stage_avg_1y = la.get("avg_1y")
+                if stage_avg_1y is not None and p.get("1y") is not None:
+                    laggard_gap = round(p["1y"] - stage_avg_1y, 2)
+                pg_key = (rf["value_chain_id"], rf.get("peer_group", ""))
                 pga = peer_group_avgs.get(pg_key, {})
                 peer_group_median_1y = pga.get("median_1y")
                 if peer_group_median_1y is not None and p.get("1y") is not None:
@@ -663,7 +663,7 @@ class CandidateMetrics:
                 bull_pct=bull_pct,
                 return_1m=p.get("1m"),
                 return_1y=p.get("1y"),
-                river_id=rf["river_id"] if rf else None,
+                value_chain_id=rf["value_chain_id"] if rf else None,
                 laggard_gap=laggard_gap,
                 has_tdnet=bool(tdnet.get(ticker)),
                 has_minkabu=ticker in minkabu,
@@ -711,57 +711,57 @@ class CandidateMetrics:
             )
 
             # D1
-            node_status = rf.get("status", "active") if rf else None
+            company_status = rf.get("status", "active") if rf else None
             has_keyword_routing = bool(tdnet_items) and not rf
             d1 = score_d1(
-                node_status=node_status,
-                is_primary_river=rf.get("primary_river", True) if rf else False,
-                has_proposed_evidence=bool(tdnet_items) if node_status == "proposed" else False,
+                company_status=company_status,
+                is_primary_value_chain=rf.get("primary_value_chain", True) if rf else False,
+                has_proposed_evidence=bool(tdnet_items) if company_status == "proposed" else False,
                 has_minkabu_theme=has_minkabu and not rf,
                 has_keyword_routing=has_keyword_routing,
             )
 
-            # D2 — peer-group 4w returns when available; otherwise layer peers.
+            # D2 — peer-group 4w returns when available; otherwise stage peers.
             peer_4w_returns = []
             active_weak_count = 0
-            layer_4w_returns = []
-            layer_active_weak_count = 0
+            stage_4w_returns = []
+            stage_active_weak_count = 0
             peer_group_peer_count = 0
             if rf:
-                for river_d2 in tree_data_global.get("rivers", []):
-                    if river_d2["id"] == rf["river_id"]:
-                        for node_d2 in river_d2.get("nodes", []):
-                            nstatus = node_d2.get("status", "active")
-                            if (node_d2["layer"] == rf["layer"]
+                for value_chain_d2 in atlas_data_global.get("value_chains", []):
+                    if value_chain_d2["id"] == rf["value_chain_id"]:
+                        for company_d2 in value_chain_d2.get("companies", []):
+                            nstatus = company_d2.get("status", "active")
+                            if (company_d2["stage"] == rf["stage"]
                                     and nstatus in ("active", "weak")
-                                    and node_d2["ticker"] != ticker):
-                                layer_active_weak_count += 1
-                                t_prices = all_prices.get(node_d2["ticker"], {})
+                                    and company_d2["ticker"] != ticker):
+                                stage_active_weak_count += 1
+                                t_prices = all_prices.get(company_d2["ticker"], {})
                                 r4w = t_prices.get("4w")
                                 if r4w is not None:
-                                    layer_4w_returns.append(r4w)
+                                    stage_4w_returns.append(r4w)
                             if (rf.get("peer_group")
-                                    and node_d2.get("peer_group") == rf.get("peer_group")
+                                    and company_d2.get("peer_group") == rf.get("peer_group")
                                     and nstatus in ("active", "weak")
-                                    and node_d2["ticker"] != ticker):
+                                    and company_d2["ticker"] != ticker):
                                 peer_group_peer_count += 1
-                                t_prices = all_prices.get(node_d2["ticker"], {})
+                                t_prices = all_prices.get(company_d2["ticker"], {})
                                 r4w = t_prices.get("4w")
                                 if r4w is not None:
                                     peer_4w_returns.append(r4w)
             if peer_group_peer_count >= 1:
                 active_weak_count = peer_group_peer_count
             else:
-                peer_4w_returns = layer_4w_returns
-                active_weak_count = layer_active_weak_count
+                peer_4w_returns = stage_4w_returns
+                active_weak_count = stage_active_weak_count
             d2 = score_d2(peer_4w_returns, active_weak_count, has_minkabu)
 
             # D3
             d3_candidate_4w = p.get("4w")
             d3_candidate_12w = p.get("12w")
-            layer_key = (rf["river_id"], rf["layer"]) if rf else None
-            la_full = layer_avgs.get(layer_key, {}) if layer_key else {}
-            pg_key = (rf["river_id"], rf.get("peer_group", "")) if rf and rf.get("peer_group") else None
+            stage_key = (rf["value_chain_id"], rf["stage"]) if rf else None
+            la_full = stage_avgs.get(stage_key, {}) if stage_key else {}
+            pg_key = (rf["value_chain_id"], rf.get("peer_group", "")) if rf and rf.get("peer_group") else None
             pg_full = peer_group_avgs.get(pg_key, {}) if pg_key else {}
             use_peer_group_benchmark = peer_group_peer_count >= 1 and pg_full.get("median_4w") is not None
             peer_avg_4w = pg_full.get("median_4w") if use_peer_group_benchmark else la_full.get("avg_4w")
@@ -831,11 +831,11 @@ class CandidateMetrics:
                 queue_gate_blocked = None
             elif d1 == 0 and not has_tier1_4_source:
                 new_queue = "C"
-                queue_gate_blocked = "no river fit and no Tier 1-4 evidence"
+                queue_gate_blocked = "no value_chain fit and no Tier 1-4 evidence"
             elif new_final_score >= 70 and d1 > 0 and has_tier1_4_source:
                 new_queue = "A"
                 queue_gate_blocked = None
-            elif new_final_score >= 40 or (node_status in {"active", "weak", "watch"} and d4_val > 0):
+            elif new_final_score >= 40 or (company_status in {"active", "weak", "watch"} and d4_val > 0):
                 new_queue = "B"
                 queue_gate_blocked = None
             else:
@@ -857,10 +857,10 @@ class CandidateMetrics:
                 "bull_pct": bull_pct,
                 "bear_pct": bear_pct,
                 "eval_scraped_at": s.get("scraped_at"),
-                # River fit
-                "river_id": rf["river_id"] if rf else None,
-                "river_name": rf["river_name"] if rf else None,
-                "layer": rf["layer"] if rf else None,
+                # Value Chain fit
+                "value_chain_id": rf["value_chain_id"] if rf else None,
+                "value_chain_name": rf["value_chain_name"] if rf else None,
+                "stage": rf["stage"] if rf else None,
                 "peer_group": rf.get("peer_group") if rf else None,
                 "causal_edge": rf.get("causal_edge") if rf else None,
                 "behind_reason": rf.get("behind_reason") if rf else None,
@@ -873,18 +873,18 @@ class CandidateMetrics:
                 "return_1m": p.get("1m"),
                 "last_close": p.get("last_close"),
                 "price_date": p.get("last_date"),
-                "layer_avg_1y": layer_avg_1y,
+                "stage_avg_1y": stage_avg_1y,
                 "laggard_gap_1y": laggard_gap,
                 "peer_group_median_1y": peer_group_median_1y,
                 "peer_group_laggard_gap_1y": peer_group_laggard_gap,
                 "peer_group_peer_count": peer_group_peer_count,
-                "laggard_benchmark": "peer_group" if use_peer_group_benchmark else "layer",
+                "laggard_benchmark": "peer_group" if use_peer_group_benchmark else "stage",
                 # Catalyst
                 "has_tdnet_48h": bool(tdnet_items),
                 "has_minkabu": has_minkabu,
                 # New D1-D6 score components
-                "d1_river_fit": d1,
-                "d2_layer_alpha": d2,
+                "d1_value_chain_fit": d1,
+                "d2_stage_alpha": d2,
                 "d3_relative_laggard": d3_val,
                 "d4_catalyst": d4_val,
                 "d5_attention_change": d5,
@@ -892,7 +892,7 @@ class CandidateMetrics:
                 "raw_score": int(d1 + d2 + d3_val + d4_val + d5 + d6),
                 "decision_memory_adjustment": dm_adj,
                 "noise_penalty": noise,
-                "node_status": node_status,
+                "company_status": company_status,
                 "pass_count": pass_count,
                 "suppress_until": dec_entry.get("suppress_until"),
                 "queue_gate_blocked": queue_gate_blocked,
@@ -905,7 +905,7 @@ class CandidateMetrics:
             }
 
             signal_families = _priority_signal_families(
-                river_id=row["river_id"],
+                value_chain_id=row["value_chain_id"],
                 bbs_rank=row["bbs_rank"],
                 speed_latest=row["speed_latest"],
                 bull_pct=row["bull_pct"],
@@ -951,7 +951,7 @@ class CandidateMetrics:
             key=lambda r: (
                 -int(r.get("priority_score", r["score"])),
                 -int(r.get("score", 0)),
-                -int(r.get("d1_river_fit", 0)),
+                -int(r.get("d1_value_chain_fit", 0)),
                 str(r.get("ticker", "")),
             )
         )

@@ -2,7 +2,7 @@
 
 A self-directed investment **research triage system** built on a Thematic Supply Chain Rotation Framework.
 
-It maintains a living map of thematic investment themes ("the river tree"), scores companies on research-worthiness using source-backed evidence, and surfaces a daily shortlist of names worth looking into today — without ever telling you to buy or sell anything.
+It maintains a living map of thematic investment themes ("the atlas"), scores companies on research-worthiness using evidence-backed evidence, and surfaces a daily shortlist of names worth looking into today — without ever telling you to buy or sell anything.
 
 The system opens doors. You walk through them or not.
 
@@ -10,22 +10,22 @@ The system opens doors. You walk through them or not.
 
 ## Core Concept
 
-Major macro trends flow like rivers — capital moves from a source through upstream enablers into middle-stream bottlenecks (highest alpha), then out through lower-stream capacity constraints.
+Major macro trends flow like value_chains — capital moves from a source through upstream enablers into bottleneck-stream bottlenecks (highest alpha), then out through capacity-stream capacity constraints.
 
 ```
-Source (CapEx) → Upper Stream (core enablers) → Middle Stream (bottlenecks ★) → Lower Stream (infrastructure)
+Source (CapEx) → Prime Stream (core enablers) → Bottleneck Stream (bottlenecks ★) → Capacity Stream (infrastructure)
 ```
 
-Four rivers are tracked:
+Four value_chains are tracked:
 
-| River | Theme |
+| Value Chain | Theme |
 |---|---|
 | `ai_infra` | AI Infrastructure Supercycle |
 | `tech_local` | Tech Localization & Onshoring |
 | `physical_ai` | Embodied Physical AI |
 | `longevity` | Demographic Longevity |
 
-The **River Tree** is the human-curated knowledge base at the center of everything. Every node reflects a deliberate decision: this company has a specific supply-chain role in this theme.
+The **Atlas** is the human-curated knowledge base at the center of everything. Every company reflects a deliberate decision: this company has a specific supply-chain role in this theme.
 
 ---
 
@@ -49,9 +49,9 @@ Candidates are split into three queues:
 
 | Queue | Label | Meaning |
 |---|---|---|
-| **A** | River Candidates | Deserves research today. Has real source-backed evidence, fits a confirmed river, and scores ≥ 70. |
-| **B** | Known Node / Monitor | Approved or watched nodes with new disclosures, peer-relative divergence, or stale thesis risk. Score ≥ 40. |
-| **C** | Crowd Heat / Noise | Active BBS attention but no confirmed river fit or source-backed catalyst. Do not prioritize. |
+| **A** | Value Chain Candidates | Deserves research today. Has real evidence-backed evidence, fits a confirmed value_chain, and scores ≥ 70. |
+| **B** | Known Company / Monitor | Approved or watched companies with new disclosures, peer-relative divergence, or stale thesis risk. Score ≥ 40. |
+| **C** | Crowd Heat / Noise | Active BBS attention but no confirmed value_chain fit or evidence-backed catalyst. Do not prioritize. |
 | Suppressed | — | Recently passed names hidden until suppression expires or a qualifying new catalyst appears. |
 
 **Queue A is the only queue that requires your attention daily.** Queue B is a weekly monitor. Queue C is background awareness — it explains why a name is hot without recommending you act.
@@ -61,8 +61,8 @@ Candidates are split into three queues:
 | Column | What it means |
 |---|---|
 | Score | Final research-worthiness score 0–100 |
-| River/Layer | Which river and supply-chain layer this ticker belongs to |
-| Lag 1y | How far this ticker lags behind its same-layer peers (1-year return). Negative = lagging peers. |
+| Value Chain/Stage | Which value_chain and supply-chain stage this ticker belongs to |
+| Lag 1y | How far this ticker lags behind its same-stage peers (1-year return). Negative = lagging peers. |
 | 1m / 3m / 1y | Price returns over 1 month, 3 months, 1 year |
 | Bull% | Yahoo BBS bull sentiment percentage |
 | BBS | Yahoo BBS rank today (● = seen today) |
@@ -76,10 +76,10 @@ Click any row to expand it. You'll see:
 
 | Dimension | Max | What it measures |
 |---|---|---|
-| D1 river fit | 25 | How strongly this ticker belongs to a confirmed river. 25 = active/weak node in primary river. 0 = no river connection. |
-| D2 layer alpha | 15 | Layer momentum — peers moving up (+8), thin layer (+5), sparse coverage (+2). |
-| D3 relative laggard | 20 | How far this ticker lags same-layer peers on 4-week and 12-week returns. Lagging = potential catch-up. |
-| D4 catalyst | 20 | Quality and freshness of source-backed evidence: TDnet disclosures, policy events, company IR. Decays over 14 days. |
+| D1 value_chain fit | 25 | How strongly this ticker belongs to a confirmed value_chain. 25 = active/weak company in primary value_chain. 0 = no value_chain connection. |
+| D2 stage alpha | 15 | Stage momentum — peers moving up (+8), thin stage (+5), sparse coverage (+2). |
+| D3 relative laggard | 20 | How far this ticker lags same-stage peers on 4-week and 12-week returns. Lagging = potential catch-up. |
+| D4 catalyst | 20 | Quality and freshness of evidence-backed evidence: TDnet disclosures, policy events, company IR. Decays over 14 days. |
 | D5 attention change | 10 | New attention signals: BBS rank improving, comment velocity up >20%, new Minkabu/analyst coverage. |
 | D6 coverage gap | 10 | Research coverage gap — no analyst coverage scores higher than crowded coverage. Only counts if D1 > 0. |
 
@@ -92,7 +92,7 @@ Click any row to expand it. You'll see:
   - Generic theme tag only: −8
 
 **Evidence Packet** — every source item that contributed to the score, with:
-- Role: `CATALYST` (company disclosure), `EVIDENCE` (river-supporting), `CONTEXT`, `ATTENTION` (BBS), `RISK`
+- Role: `CATALYST` (company disclosure), `EVIDENCE` (value_chain-supporting), `CONTEXT`, `ATTENTION` (BBS), `RISK`
 - Source tier (1 = regulatory/government, 2 = TDnet/company primary, 3 = trade press, 4 = financial press, 5–6 = commentary/BBS)
 - Freshness in days
 - Points contributed
@@ -110,7 +110,7 @@ Expand a row to record your decision. All decisions are appended (not overwritte
 |---|---|---|
 | **Pass** | `pass` | Suppresses this ticker for 28 days (1st pass), 42 days (2nd), or 84 days (3rd+). Score gets a memory penalty. |
 | **Watch** | `watch` | Marks as being monitored. No suppression. |
-| **River Candidate** | `river_candidate` | Flags for potential tree promotion. Appears in Watchlist. |
+| **Value Chain Candidate** | `value_chain_candidate` | Flags for potential atlas promotion. Appears in Watchlist. |
 | **Research** | `needs_manual_research` | Marks for manual deep-dive within 7 days. |
 
 Suppression resets early if a qualifying new catalyst appears — the threshold scales up with pass count (requires progressively stronger evidence from higher-tier sources).
@@ -119,9 +119,9 @@ You can optionally type a reason before clicking. The **Show suppressed** button
 
 ---
 
-## Node Lifecycle
+## Company Lifecycle
 
-Nodes in the tree have six lifecycle states:
+Companies in the atlas have six lifecycle states:
 
 | Status | Meaning |
 |---|---|
@@ -129,10 +129,10 @@ Nodes in the tree have six lifecycle states:
 | `active` | Fully accepted, currently monitored |
 | `weak` | Relevant but evidence is thin or stale |
 | `watch` | Interesting, waiting for stronger evidence |
-| `dormant` | Structurally relevant but quiet — excluded from active layer counts and daily queues |
+| `dormant` | Structurally relevant but quiet — excluded from active stage counts and daily queues |
 | `rejected` | Reviewed and not a fit; kept for institutional memory |
 
-Only `active` and `weak` nodes count toward layer totals for D2 and D3 scoring. Dormant nodes are invisible to daily scoring but preserved in the tree.
+Only `active` and `weak` companies count toward stage totals for D2 and D3 scoring. Dormant companies are invisible to daily scoring but preserved in the atlas.
 
 ---
 
@@ -141,7 +141,7 @@ Only `active` and `weak` nodes count toward layer totals for D2 and D3 scoring. 
 - No buy, sell, hold, or price target recommendations
 - No portfolio construction advice
 - No automated trading actions
-- No fully automated node promotion (every tree change requires a human decision)
+- No fully automated company promotion (every atlas change requires a human decision)
 - No LLM-generated score facts — every score point traces back to a specific source
 
 ---
@@ -154,7 +154,7 @@ Only `active` and `weak` nodes count toward layer totals for D2 and D3 scoring. 
 | **Yahoo BBS ranking + comments** | D5 attention change only. Never D1 or D4. BBS-only names are blocked from Queue A. |
 | **Minkabu** | D5 attention (new coverage), D6 coverage gap context, D2 "not crowded" signal |
 | **Price/volume** (yfinance) | D3 relative laggard gap. Not a discovery or catalyst source. |
-| **River Tree** | D1 river fit (primary signal), D2 peer set |
+| **Atlas** | D1 value_chain fit (primary signal), D2 peer set |
 
 Source tiers: 1 (regulatory/government) · 2 (company primary/TDnet) · 3 (specialist trade press) · 4 (general financial press) · 5–6 (commentary/BBS, zero weight in D4)
 
@@ -204,24 +204,24 @@ python src/cli.py sources check --all
 python src/cli.py sources show --ticker SMCI
 ```
 
-### River Tree
+### Atlas
 
 ```bash
-python src/cli.py tree show
-python src/cli.py tree show --river ai_infra
+python src/cli.py atlas show
+python src/cli.py atlas show --value_chain ai_infra
 
-# Add a node after completing a deep dive
-python src/cli.py tree node-add --river ai_infra --ticker 6146.T --layer middle \
+# Add a company after completing a deep dive
+python src/cli.py atlas company-add --value_chain ai_infra --ticker 6146.T --stage bottleneck \
     --name "Disco Corp" --market JP --role "Chemical-mechanical planarization equipment"
 
-python src/cli.py tree node-update --river ai_infra --ticker 6146.T \
+python src/cli.py atlas company-update --value_chain ai_infra --ticker 6146.T \
     --status active --notes "confirmed semiconductor exposure"
-python src/cli.py tree node-remove --river ai_infra --ticker 6146.T
+python src/cli.py atlas company-remove --value_chain ai_infra --ticker 6146.T
 ```
 
-Layers: `source` · `upper` · `middle` · `lower`
+Stages: `driver` · `prime` · `bottleneck` · `capacity`
 
-Node statuses: `proposed` · `active` · `weak` · `watch` · `dormant` · `rejected`
+Company statuses: `proposed` · `active` · `weak` · `watch` · `dormant` · `rejected`
 
 ### Research Tools
 
@@ -229,7 +229,7 @@ Node statuses: `proposed` · `active` · `weak` · `watch` · `dormant` · `reje
 # Full research brief on a single ticker
 python src/cli.py dive --ticker 6146.T
 
-# Classify a ticker or keyword into the river tree
+# Classify a ticker or keyword into the atlas
 python src/cli.py discover --ticker 6146.T
 python src/cli.py discover --keyword "optical transceiver"
 python src/cli.py discover              # autonomous BBS scan
@@ -247,16 +247,16 @@ src/elephant/
   candidates.py           # D1–D6 scoring, queue assignment, evidence packet builder
   scoring.py              # Score functions for each dimension (stateless, testable)
   scoring_config.py       # Calibration constants (thresholds, keywords, tier weights)
-  decisions.py            # Decision log — pass/watch/river_candidate/needs_manual_research
-  maintenance.py          # Queue D generation from tree state + resolution log
+  decisions.py            # Decision log — pass/watch/value_chain_candidate/needs_manual_research
+  maintenance.py          # Queue D generation from atlas state + resolution log
 
-  river/
-    tree.py               # RiverTree, River, Node (lifecycle v2), JSON persistence
+  value_chain/
+    atlas.py               # Atlas, Value Chain, Company (lifecycle v2), JSON persistence
     discoverer.py         # Claude-powered ticker classification
 
   api/
     candidates.py         # GET /api/candidates
-    tree.py               # GET /api/tree (with lifecycle metadata)
+    atlas.py               # GET /api/atlas (with lifecycle metadata)
     maintenance.py        # GET /api/maintenance + POST /api/maintenance/{id}/resolve
 
   yjp_bbs_rank/           # Yahoo BBS rank scraper (28-day cache with daily rank)
@@ -270,8 +270,8 @@ src/cli.py                # CLI entry point
 web/src/
   components/
     Candidates.jsx        # Daily triage — score breakdown, evidence, decision actions
-    Tree.jsx              # River tree viewer with lifecycle status
-    Watchlist.jsx         # river_candidate watchlist with since-flag returns
+    Atlas.jsx              # Atlas viewer with lifecycle status
+    Watchlist.jsx         # value_chain_candidate watchlist with since-flag returns
 ```
 
 ### Data Storage
@@ -279,7 +279,7 @@ web/src/
 All data under `$ELEPHANT_DATA_DIR` (default `/panda-infra/elephant`):
 
 ```
-river_tree.json                          # river tree (v2, with lifecycle fields)
+atlas.json                          # atlas (v2, with lifecycle fields)
 decisions.json                           # decision log (keyed by ticker)
 tickers.txt                              # active BBS ticker list
 tickers.cache.json                       # BBS cache: last_seen, speed_history (28-day rank)
@@ -296,6 +296,6 @@ dataset=daily_prices/ticker={t}/         # price history (yfinance)
 
 ## Docs
 
-- `doc/river_framework.md` — Thematic Supply Chain Rotation Framework
+- `doc/value_chain_framework.md` — Thematic Supply Chain Rotation Framework
 - `STRATEGY.md` — the betting philosophy behind the framework
 - `spec/SPEC.md` — system design rationale

@@ -1,20 +1,20 @@
-# River Building and Maintenance System
+# Value Chain Building and Maintenance System
 
-Potential Elephant's river tree should be a living evidence database, not a
+Potential Elephant's atlas should be a living evidence database, not a
 static watchlist. The goal is to use public theme pages, ETF holdings, existing
-harvested news, and price relationships to propose tree changes while keeping
+harvested news, and price relationships to propose atlas changes while keeping
 human approval in control.
 
 ## Principles
 
-- Store evidence separately from the curated river tree.
+- Store evidence separately from the curated atlas.
 - Treat ETF holdings and public theme pages as external labels for
   ticker-theme membership.
 - Use deterministic scores first. Use LLMs only to explain, classify ambiguous
-  supply-chain layer, or propose a new river name.
-- Never silently promote a ticker into `river_tree.json`. The system should
+  supply-chain stage, or propose a new value_chain name.
+- Never silently promote a ticker into `atlas.json`. The system should
   generate `proposed` suggestions that a human accepts, rejects, or watches.
-- Preserve the existing river advantage: source -> upper -> middle -> lower is
+- Preserve the existing value_chain advantage: driver -> prime -> bottleneck -> capacity is
   about causal flow, not just keyword similarity.
 
 ## Data Sources
@@ -25,7 +25,7 @@ Primary sources to harvest or import are defined in one place:
 
 That file contains:
 
-- `THEME_DEFINITIONS`: river/layer-aware theme identities
+- `THEME_DEFINITIONS`: value_chain/stage-aware theme identities
 - `THEME_SOURCES`: source index links and extraction settings
 
 To add a new source index page, add one
@@ -34,7 +34,7 @@ new hardcoded map for each source.
 
 Supported source kinds:
 
-- `theme_index`: first-layer page that links to many public themes or ETF
+- `theme_index`: first-stage page that links to many public themes or ETF
   baskets. The harvester stores raw themes in `theme_source_themes`, then
   crawls each detail page for tickers.
 - `theme_page`: supported by the harvester, but not used in the active starting
@@ -44,7 +44,7 @@ Supported source kinds:
 
 Supported extractors:
 
-- `html_theme_links`: extracts theme/detail links from a first-layer index page
+- `html_theme_links`: extracts theme/detail links from a first-stage index page
 - `html_ticker_regex`: extracts ticker codes from an HTML page
 - `csv_holdings`: reads a holdings CSV using configured ticker/weight columns
 - `html_holdings_regex`: extracts likely ticker symbols from an HTML holdings page
@@ -56,14 +56,14 @@ Active starting sources:
 - `https://kabutan.jp/info/accessranking/3_2`
 - `https://www.stocktitan.net/stocks/themes`
 
-These are all treated as first-layer `theme_index` pages. Each index produces
+These are all treated as first-stage `theme_index` pages. Each index produces
 raw theme/detail links, then each detail page is harvested for tickers.
 - Existing repo datasets:
   - `news_headlines`
   - `minkabu_raw_html`
   - `daily_prices`
   - `ticker_analysis_signals`
-  - `river_tree.json`
+  - `atlas.json`
 
 Useful public source catalogs and APIs:
 
@@ -79,9 +79,9 @@ Useful public source catalogs and APIs:
 The system uses these parquet datasets under `$ELEPHANT_DATA_DIR`:
 
 - `dataset=theme_definitions`
-  Theme IDs, names, river mappings, layer hints, source URLs, and theme purity.
+  Theme IDs, names, value_chain mappings, stage hints, source URLs, and theme purity.
 - `dataset=theme_source_themes`
-  Raw first-layer themes discovered from each configured source, with source
+  Raw first-stage themes discovered from each configured source, with source
   theme name, detail URL, rank, and deterministic canonical theme guess.
 - `dataset=theme_members`
   Ticker membership from public theme pages such as Minkabu.
@@ -89,14 +89,14 @@ The system uses these parquet datasets under `$ELEPHANT_DATA_DIR`:
   ETF constituents with optional weights and a mapped theme ID.
 - `dataset=ticker_theme_scores`
   Aggregated ticker-theme evidence scores.
-- `dataset=river_suggestions`
-  Proposed river-tree nodes with evidence and peer relationships.
+- `dataset=value_chain_suggestions`
+  Proposed value_chain-atlas companies with evidence and peer relationships.
 
-The curated tree remains `river_tree.json`.
+The curated atlas remains `atlas.json`.
 
-## Two-Layer Input Flow
+## Two-Stage Input Flow
 
-The theme input side has two layers:
+The theme input side has two stages:
 
 1. Source index -> raw themes
    - Example: `https://minkabu.jp/theme/popular_ranking`
@@ -110,14 +110,14 @@ The theme input side has two layers:
      source URL.
 
 Raw themes whose names are not confidently consolidated are kept as `raw_*`
-themes for audit, but they do not become final river assignments.
+themes for audit, but they do not become final value_chain assignments.
 
 ## Theme Consolidation
 
 The first version uses deterministic keyword consolidation in
 `src/elephant/theme/catalog.py`:
 
-- `THEME_DEFINITIONS`: canonical themes tied to river/layer
+- `THEME_DEFINITIONS`: canonical themes tied to value_chain/stage
 - `THEME_KEYWORDS`: aliases and Japanese/English keywords used to map raw
   source theme names into canonical themes
 
@@ -187,7 +187,7 @@ assigned =
 ```
 
 Rows below this threshold remain useful raw evidence, but they do not generate
-river suggestions.
+value_chain suggestions.
 
 ## ETF Co-Membership and Grouping
 
@@ -202,7 +202,7 @@ values = normalized evidence weights
 Ticker similarity is cosine similarity over that matrix. This supports:
 
 - peer group assignment
-- same-row grouping in the river view
+- same-row grouping in the value_chain view
 - competitor ticker suggestions
 - leader ticker suggestions
 
@@ -212,19 +212,19 @@ Example:
 - ticker Y appears in 5 AI ETFs
 - X should usually receive a stronger AI theme score
 - if X and Y appear in the same ETFs with similar weights, they should be
-  close peers in the river view
+  close peers in the value_chain view
 
-## River Layer Classification
+## Value Chain Stage Classification
 
-Theme membership alone should not choose a layer. Layer assignment should use
+Theme membership alone should not choose a stage. Stage assignment should use
 rules plus optional LLM review:
 
-- `source`: capital deployer, policy origin, demand creator
-- `upper`: platform company, designer, OEM, primary enabler
-- `middle`: bottleneck component, materials, equipment, precision supplier
-- `lower`: infrastructure, logistics, power, real estate, deployment capacity
+- `driver`: capital deployer, policy origin, demand creator
+- `prime`: platform company, designer, OEM, primary enabler
+- `bottleneck`: bottleneck component, materials, equipment, precision supplier
+- `capacity`: infrastructure, logistics, power, real estate, deployment capacity
 
-The current implementation uses `layer_hint` from the theme definition. Later
+The current implementation uses `stage_hint` from the theme definition. Later
 versions should add company description and LLM classification for ambiguous
 cases.
 ## Maintenance Workflow
@@ -235,21 +235,21 @@ Weekly offline run:
 2. Normalize tickers and source metadata.
 3. Build ticker-theme scores.
 4. Compute ticker similarity and peer candidates.
-5. Compare suggestions with `river_tree.json`.
-6. Write `river_suggestions`.
+5. Compare suggestions with `atlas.json`.
+6. Write `value_chain_suggestions`.
 7. Apply maintenance in dry-run mode.
 8. Review additions and removals in UI or CLI.
-9. Apply accepted changes to the tree.
+9. Apply accepted changes to the atlas.
 
 Maintenance does two things:
 
-- add high-score proposed nodes
-- remove low-score nodes that were originally added by `source=theme_discovery`
+- add high-score proposed companies
+- remove low-score companies that were originally added by `source=theme_discovery`
 
-Removal is intentionally conservative. It does not remove manual nodes, and it
-does not remove theme-discovered nodes with a recorded human decision. If the
+Removal is intentionally conservative. It does not remove manual companies, and it
+does not remove theme-discovered companies with a recorded human decision. If the
 latest score dataset is missing, removal is skipped rather than treating every
-node as zero score.
+company as zero score.
 
 ## Commands
 
@@ -266,7 +266,7 @@ PYTHONPATH=src python src/cli2.py themes harvest-sources --source kabutan_theme_
 PYTHONPATH=src python src/cli2.py themes harvest-sources
 ```
 
-Inspect raw first-layer themes:
+Inspect raw first-stage themes:
 
 ```bash
 PYTHONPATH=src python src/cli2.py themes source-themes --limit 50
@@ -293,7 +293,7 @@ PYTHONPATH=src python src/cli2.py themes apply --min-score 30 --dry-run
 PYTHONPATH=src python src/cli2.py themes apply --min-score 30
 ```
 
-By default, the same command also removes low-score theme-discovered nodes whose
+By default, the same command also removes low-score theme-discovered companies whose
 latest ticker-theme score is below `28`:
 
 ```bash
@@ -313,7 +313,7 @@ Apply one explicitly reviewed suggestion:
 PYTHONPATH=src python src/cli2.py themes apply --suggestion-id <id>
 ```
 
-Applied nodes are added to `river_tree.json` as `source=theme_discovery` and
+Applied companies are added to `atlas.json` as `source=theme_discovery` and
 `status=proposed`. They are not marked `active` until later review.
 
 Expected CSV columns:
@@ -331,7 +331,7 @@ etf,theme_id,ticker,name,holding_weight,issuer,source_url,as_of,theme_purity,iss
 ```
 
 Only `theme_id` and `ticker` are strictly required. Missing weights are handled
-as lower-confidence membership evidence.
+as capacity-confidence membership evidence.
 
 ## Starting sources
 

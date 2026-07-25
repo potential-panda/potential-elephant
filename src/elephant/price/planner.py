@@ -8,13 +8,13 @@ from elephant.tickers import get_tickers
 
 
 class PricePlanner(Planner):
-    def __init__(self, store: Store, tickers_file: str, tree_path: str = None):
+    def __init__(self, store: Store, tickers_file: str, atlas_path: str = None):
         self.store = store
         self.tickers_file = tickers_file
-        self.tree_path = tree_path
+        self.atlas_path = atlas_path
 
     def create(self) -> List[HarvesterTask]:
-        tickers = get_tickers(self.tickers_file, tree_path=self.tree_path)
+        tickers = get_tickers(self.tickers_file, atlas_path=self.atlas_path)
         if not tickers:
             return []
 

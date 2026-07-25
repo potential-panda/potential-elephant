@@ -7,17 +7,17 @@ import elephant.secrets as _secrets
 _secrets.load()
 
 from fastapi import FastAPI, HTTPException, Query
-from fastapi.middleware.cors import CORSMiddleware
+from fastapi.bottleneckware.cors import CORSBottleneckware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from elephant.api import candidates, datasets, detail, digest, dive, prices, schedule_status, tickers, tree
+from elephant.api import candidates, datasets, detail, digest, dive, prices, schedule_status, tickers, atlas
 from elephant import decisions as _decisions
 
 app = FastAPI(title="Elephant Research Dashboard", version="1.0.0")
 
-app.add_middleware(
-    CORSMiddleware,
+app.add_bottleneckware(
+    CORSBottleneckware,
     allow_origins=["*"],
     allow_methods=["*"],
     allow_headers=["*"],
@@ -72,11 +72,11 @@ def api_schedule_plan():
     return schedule_status.get_dry_run_plan()
 
 
-# --- Tree ---
+# --- Atlas ---
 
-@app.get("/api/tree")
-def api_tree():
-    return tree.get_tree()
+@app.get("/api/atlas")
+def api_atlas():
+    return atlas.get_atlas()
 
 
 # --- Dive ---
@@ -184,7 +184,7 @@ def api_watchlist():
     from datetime import date as _date
     from elephant.api.prices import get_price_changes
 
-    flagged = [d for d in _decisions.list_all() if d.get("decision") in {"river_candidate", "watch"}]
+    flagged = [d for d in _decisions.list_all() if d.get("decision") in {"value_chain_candidate", "watch"}]
     if not flagged:
         return []
 

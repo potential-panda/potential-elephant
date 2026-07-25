@@ -15,7 +15,7 @@ def score(**kwargs):
     defaults = dict(
         is_jp=True, bbs_rank=None, is_today_bbs=False, speed_trend=None,
         speed_latest=None, has_yahoo_jp_bbs=None,
-        bull_pct=None, return_1m=None, return_1y=None, river_id=None,
+        bull_pct=None, return_1m=None, return_1y=None, value_chain_id=None,
         laggard_gap=None, has_tdnet=False, has_minkabu=False,
     )
     defaults.update(kwargs)
@@ -23,55 +23,55 @@ def score(**kwargs):
 
 
 class TestQueueAssignment:
-    def test_3350_no_river_fit_is_crowd_heat(self):
-        # 3350.T = Metaplanet: JP, high BBS heat, no river fit → C
+    def test_3350_no_value_chain_fit_is_crowd_heat(self):
+        # 3350.T = Metaplanet: JP, high BBS heat, no value_chain fit → C
         s, q, _ = score(is_jp=True, bbs_rank=3, is_today_bbs=True, speed_trend="accel",
-                        speed_latest=15.0, bull_pct=55, return_1m=-8, river_id=None)
+                        speed_latest=15.0, bull_pct=55, return_1m=-8, value_chain_id=None)
         assert q == "C", f"3350.T should be queue C, got {q}"
 
-    def test_8136_no_river_crowd_panic_is_crowd_heat(self):
-        # 8136.T: JP, huge spike, no river fit → C
+    def test_8136_no_value_chain_crowd_panic_is_crowd_heat(self):
+        # 8136.T: JP, huge spike, no value_chain fit → C
         s, q, _ = score(is_jp=True, bbs_rank=1, is_today_bbs=True, speed_trend="accel",
-                        speed_latest=88.0, bull_pct=20, return_1m=-15, river_id=None)
+                        speed_latest=88.0, bull_pct=20, return_1m=-15, value_chain_id=None)
         assert q == "C", f"8136.T should be queue C, got {q}"
 
-    def test_jp_river_laggard_is_queue_A(self):
+    def test_jp_value_chain_laggard_is_queue_A(self):
         s, q, _ = score(is_jp=True, bbs_rank=5, is_today_bbs=True, speed_trend="stable",
                         speed_latest=8.0, bull_pct=65, return_1m=-5,
-                        river_id="tech_local", laggard_gap=-20.0)
-        assert q == "A", f"JP river laggard should be queue A, got {q}"
+                        value_chain_id="tech_local", laggard_gap=-20.0)
+        assert q == "A", f"JP value_chain laggard should be queue A, got {q}"
 
-    def test_jp_river_bbs_hot_today_is_queue_A(self):
+    def test_jp_value_chain_bbs_hot_today_is_queue_A(self):
         s, q, _ = score(is_jp=True, bbs_rank=10, is_today_bbs=True, speed_trend="stable",
                         speed_latest=12.0, bull_pct=55, return_1m=-2,
-                        river_id="ai_infra", laggard_gap=None)
-        assert q == "A", f"JP river + BBS today should be queue A, got {q}"
+                        value_chain_id="ai_infra", laggard_gap=None)
+        assert q == "A", f"JP value_chain + BBS today should be queue A, got {q}"
 
-    def test_jp_silent_river_node_gets_penalty(self):
-        # JP ticker in river tree but never appeared in BBS → penalty
+    def test_jp_silent_value_chain_company_gets_penalty(self):
+        # JP ticker in atlas but never appeared in BBS → penalty
         s_silent, _, _ = score(is_jp=True, bbs_rank=None, speed_latest=None,
-                               river_id="ai_infra", laggard_gap=-15.0)
+                               value_chain_id="ai_infra", laggard_gap=-15.0)
         s_active, _, _ = score(is_jp=True, bbs_rank=5, is_today_bbs=True,
-                               speed_latest=10.0, river_id="ai_infra", laggard_gap=-15.0)
-        assert s_silent < s_active, "silent JP should score lower than active JP"
+                               speed_latest=10.0, value_chain_id="ai_infra", laggard_gap=-15.0)
+        assert s_silent < s_active, "silent JP should score capacity than active JP"
 
     def test_holding_signal_is_queue_B(self):
         s, q, _ = score(is_jp=True, bbs_rank=25, is_today_bbs=False, speed_latest=3.0,
-                        bull_pct=65, return_1m=-8.0, river_id=None)
+                        bull_pct=65, return_1m=-8.0, value_chain_id=None)
         assert q == "B", f"holding signal should be queue B, got {q}"
 
     def test_5016_jp_materials_candidate(self):
         s, q, r = score(is_jp=True, bbs_rank=15, is_today_bbs=True, speed_trend="stable",
                         speed_latest=6.0, bull_pct=62, return_1m=-11,
-                        river_id="tech_local", laggard_gap=-18.0, has_minkabu=True)
-        assert q == "A", f"5016.T river candidate should be A, got {q}"
+                        value_chain_id="tech_local", laggard_gap=-18.0, has_minkabu=True)
+        assert q == "A", f"5016.T value_chain candidate should be A, got {q}"
         assert s > 40, f"score should be meaningful, got {s}"
 
-    def test_smci_us_river_laggard_with_momentum(self):
+    def test_smci_us_value_chain_laggard_with_momentum(self):
         # SMCI: US, huge laggard gap, 1y still low → true laggard bonus, strong 1m
         s, q, _ = score(is_jp=False, bbs_rank=None, speed_latest=None,
                         has_yahoo_jp_bbs=None, return_1m=42.0, return_1y=6.0,
-                        river_id="ai_infra", laggard_gap=-170.0)
+                        value_chain_id="ai_infra", laggard_gap=-170.0)
         assert q == "A", f"SMCI should be queue A, got {q}"
         assert s >= 55, f"SMCI score should be ≥55 (true laggard), got {s}"
 
@@ -79,18 +79,18 @@ class TestQueueAssignment:
         # US stock with Yahoo JP BBS comments → big bonus vs same stock without
         s_bbs, _, _ = score(is_jp=False, speed_latest=8.0, speed_trend="accel",
                             has_yahoo_jp_bbs=True, return_1m=5.0,
-                            river_id="ai_infra", laggard_gap=-20.0)
+                            value_chain_id="ai_infra", laggard_gap=-20.0)
         s_no_bbs, _, _ = score(is_jp=False, speed_latest=None,
                                has_yahoo_jp_bbs=False, return_1m=5.0,
-                               river_id="ai_infra", laggard_gap=-20.0)
+                               value_chain_id="ai_infra", laggard_gap=-20.0)
         assert s_bbs > s_no_bbs + 15, f"US with BBS ({s_bbs}) should be 15+ pts above no-BBS ({s_no_bbs})"
 
     def test_score_capped_at_100(self):
         # US stock with all signals maxed:
-        # river(15+20+5=40) + heat(15+8+20=43) + sentiment(15) + catalyst(3) = 101 → capped
+        # value_chain(15+20+5=40) + heat(15+8+20=43) + sentiment(15) + catalyst(3) = 101 → capped
         s, _, _ = score(is_jp=False, bbs_rank=None, speed_latest=8.0, speed_trend="accel",
                         has_yahoo_jp_bbs=True, bull_pct=90, return_1m=35.0, return_1y=5.0,
-                        river_id="ai_infra", laggard_gap=-170.0,
+                        value_chain_id="ai_infra", laggard_gap=-170.0,
                         has_tdnet=False, has_minkabu=True)
         assert s == 100, f"score must be capped at 100, got {s}"
 
@@ -102,7 +102,7 @@ def test_safe_float_converts_nan_to_default():
 
 
 def test_us_yahoo_jp_bbs_presence_counts_in_d5():
-    # US activity-presence (+1, requires actual recent comments) + upper
+    # US activity-presence (+1, requires actual recent comments) + prime
     # velocity tier (+2, >= 4.5 comments/hour) = 3.
     assert score_d5(
         [],

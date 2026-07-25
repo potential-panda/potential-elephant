@@ -5,13 +5,13 @@ import pandas as pd
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
-from elephant.theme.builder import build_theme_river_system, build_ticker_theme_scores
-from elephant.theme.apply import apply_river_suggestions
+from elephant.theme.builder import build_theme_value_chain_system, build_ticker_theme_scores
+from elephant.theme.apply import apply_value_chain_suggestions
 from elephant.theme.catalog import get_theme_source, list_theme_sources
 from elephant.theme.harvest import harvest_theme_source
-from elephant.theme.io import import_etf_holdings_csv, import_theme_members_csv, load_river_suggestions, load_theme_source_themes
+from elephant.theme.io import import_etf_holdings_csv, import_theme_members_csv, load_value_chain_suggestions, load_theme_source_themes
 from elephant.theme.io import write_dataset
-from elephant.river.tree import RiverTree
+from elephant.atlas.atlas import Atlas
 
 
 def test_theme_builder_scores_etf_co_membership(tmp_path):
@@ -50,14 +50,14 @@ def test_theme_builder_imports_theme_members_and_writes_suggestions(tmp_path):
     ).to_csv(csv_path, index=False)
 
     assert import_theme_members_csv(str(csv_path), str(tmp_path)) == 1
-    result = build_theme_river_system(str(tmp_path), tree_path=str(tmp_path / "river_tree.json"), save=True)
+    result = build_theme_value_chain_system(str(tmp_path), atlas_path=str(tmp_path / "atlas.json"), save=True)
 
     assert result.score_rows == 1
     assert result.suggestion_rows == 1
-    suggestions = load_river_suggestions(str(tmp_path))
+    suggestions = load_value_chain_suggestions(str(tmp_path))
     row = suggestions.iloc[0]
     assert row["ticker"] == "6861.T"
-    assert row["river_id"] == "physical_ai"
+    assert row["value_chain_id"] == "physical_ai"
     assert row["status"] == "proposed"
 
 
@@ -97,7 +97,7 @@ def test_theme_index_harvests_globalx_funds_then_fund_tickers(tmp_path, monkeypa
 
     assert dataset == "theme_source_themes,theme_members"
     assert rows == 3
-    result = build_theme_river_system(str(tmp_path), tree_path=str(tmp_path / "river_tree.json"), save=True)
+    result = build_theme_value_chain_system(str(tmp_path), atlas_path=str(tmp_path / "atlas.json"), save=True)
     assert result.score_rows == 0
     assert result.suggestion_rows == 0
 
@@ -139,18 +139,18 @@ def test_theme_index_harvests_globalx_us_holdings_from_solactive_csv(tmp_path, m
 
 
 def test_apply_uses_market_specific_thresholds(tmp_path):
-    tree_path = tmp_path / "river_tree.json"
-    tree = RiverTree(str(tree_path))
-    tree.add_river("ai_infra", "AI Infrastructure")
+    atlas_path = tmp_path / "atlas.json"
+    atlas = Atlas(str(atlas_path))
+    atlas.add_value_chain("ai_infra", "AI Infrastructure")
     write_dataset(
-        "river_suggestions",
+        "value_chain_suggestions",
         [
             {
                 "id": "us-low",
                 "ticker": "AAPL",
                 "market": "US",
-                "river_id": "ai_infra",
-                "layer": "upper",
+                "value_chain_id": "ai_infra",
+                "stage": "prime",
                 "theme_id": "ai_infrastructure",
                 "theme_name": "AI Infrastructure",
                 "score": 16.0,
@@ -162,8 +162,8 @@ def test_apply_uses_market_specific_thresholds(tmp_path):
                 "id": "jp-low",
                 "ticker": "2158.T",
                 "market": "JP",
-                "river_id": "ai_infra",
-                "layer": "source",
+                "value_chain_id": "ai_infra",
+                "stage": "driver",
                 "theme_id": "ai_infrastructure",
                 "theme_name": "AI Infrastructure",
                 "score": 16.0,
@@ -176,9 +176,9 @@ def test_apply_uses_market_specific_thresholds(tmp_path):
         replace=True,
     )
 
-    result = apply_river_suggestions(
+    result = apply_value_chain_suggestions(
         data_dir=str(tmp_path),
-        tree_path=str(tree_path),
+        atlas_path=str(atlas_path),
         min_score=25,
         min_us_score=15,
         remove_low_score=False,
@@ -190,10 +190,10 @@ def test_apply_uses_market_specific_thresholds(tmp_path):
 
 
 def test_apply_uses_market_specific_remove_thresholds(tmp_path):
-    tree_path = tmp_path / "river_tree.json"
-    tree = RiverTree(str(tree_path))
-    tree.add_river("ai_infra", "AI Infrastructure")
-    tree.add_node("ai_infra", "AAPL", "source", source="theme_discovery")
+    atlas_path = tmp_path / "atlas.json"
+    atlas = Atlas(str(atlas_path))
+    atlas.add_value_chain("ai_infra", "AI Infrastructure")
+    atlas.add_company("ai_infra", "AAPL", "driver", source="theme_discovery")
     write_dataset(
         "ticker_theme_scores",
         [
@@ -201,7 +201,7 @@ def test_apply_uses_market_specific_remove_thresholds(tmp_path):
                 "id": "score-aapl",
                 "ticker": "AAPL",
                 "theme_id": "ai_infrastructure",
-                "river_id": "ai_infra",
+                "value_chain_id": "ai_infra",
                 "score": 16.0,
                 "evidence_count": 1,
             }
@@ -210,22 +210,22 @@ def test_apply_uses_market_specific_remove_thresholds(tmp_path):
         replace=True,
     )
 
-    kept = apply_river_suggestions(
+    kept = apply_value_chain_suggestions(
         data_dir=str(tmp_path),
-        tree_path=str(tree_path),
+        atlas_path=str(atlas_path),
         remove_min_score=20,
         remove_min_us_score=12,
         dry_run=True,
     )
-    removed = apply_river_suggestions(
+    removed = apply_value_chain_suggestions(
         data_dir=str(tmp_path),
-        tree_path=str(tree_path),
+        atlas_path=str(atlas_path),
         remove_min_score=20,
         dry_run=True,
     )
 
-    assert not any(change["action"] == "remove_node" for change in kept.changes)
-    assert any(change["action"] == "remove_node" for change in removed.changes)
+    assert not any(change["action"] == "remove_company" for change in kept.changes)
+    assert any(change["action"] == "remove_company" for change in removed.changes)
 
 
 def test_theme_index_harvests_themes_then_theme_tickers(tmp_path, monkeypatch):
@@ -245,7 +245,7 @@ def test_theme_index_harvests_themes_then_theme_tickers(tmp_path, monkeypatch):
     assert rows == 4
     themes = load_theme_source_themes(str(tmp_path))
     assert themes.iloc[0]["canonical_theme_id"] == "physical_ai"
-    result = build_theme_river_system(str(tmp_path), tree_path=str(tmp_path / "river_tree.json"), save=True)
+    result = build_theme_value_chain_system(str(tmp_path), atlas_path=str(tmp_path / "atlas.json"), save=True)
     assert result.score_rows == 3
 
 
@@ -268,10 +268,10 @@ def test_theme_builder_assigns_top_theme_candidates_relative_to_theme_distributi
     assert bool(yaskawa["assigned"]) is False
 
 
-def test_apply_river_suggestions_requires_explicit_non_dry_run(tmp_path):
-    tree_path = tmp_path / "river_tree.json"
-    tree = RiverTree(str(tree_path))
-    tree.add_river("physical_ai", "Physical AI")
+def test_apply_value_chain_suggestions_requires_explicit_non_dry_run(tmp_path):
+    atlas_path = tmp_path / "atlas.json"
+    atlas = Atlas(str(atlas_path))
+    atlas.add_value_chain("physical_ai", "Physical AI")
     csv_path = tmp_path / "members.csv"
     pd.DataFrame(
         [
@@ -285,28 +285,28 @@ def test_apply_river_suggestions_requires_explicit_non_dry_run(tmp_path):
         ]
     ).to_csv(csv_path, index=False)
     import_theme_members_csv(str(csv_path), str(tmp_path))
-    build_theme_river_system(str(tmp_path), tree_path=str(tree_path), save=True)
+    build_theme_value_chain_system(str(tmp_path), atlas_path=str(atlas_path), save=True)
 
-    dry = apply_river_suggestions(data_dir=str(tmp_path), tree_path=str(tree_path), min_score=50, dry_run=True)
+    dry = apply_value_chain_suggestions(data_dir=str(tmp_path), atlas_path=str(atlas_path), min_score=50, dry_run=True)
     assert dry.evaluated == 1
     assert dry.applied == 0
-    assert RiverTree(str(tree_path)).find_ticker("6861.T") == []
+    assert Atlas(str(atlas_path)).find_ticker("6861.T") == []
 
-    applied = apply_river_suggestions(data_dir=str(tmp_path), tree_path=str(tree_path), min_score=50, dry_run=False)
-    nodes = RiverTree(str(tree_path)).find_ticker("6861.T")
+    applied = apply_value_chain_suggestions(data_dir=str(tmp_path), atlas_path=str(atlas_path), min_score=50, dry_run=False)
+    companies = Atlas(str(atlas_path)).find_ticker("6861.T")
 
     assert applied.applied == 1
-    assert len(nodes) == 1
-    assert nodes[0][1].status == "proposed"
-    assert nodes[0][1].source == "theme_discovery"
+    assert len(companies) == 1
+    assert companies[0][1].status == "proposed"
+    assert companies[0][1].source == "theme_discovery"
 
 
-def test_apply_river_suggestions_removes_low_score_theme_discovered_nodes(tmp_path):
-    tree_path = tmp_path / "river_tree.json"
-    tree = RiverTree(str(tree_path))
-    tree.add_river("physical_ai", "Physical AI")
-    tree.add_node("physical_ai", "6861.T", "upper", source="theme_discovery")
-    tree.add_node("physical_ai", "6506.T", "upper", source="manual")
+def test_apply_value_chain_suggestions_removes_low_score_theme_discovered_companies(tmp_path):
+    atlas_path = tmp_path / "atlas.json"
+    atlas = Atlas(str(atlas_path))
+    atlas.add_value_chain("physical_ai", "Physical AI")
+    atlas.add_company("physical_ai", "6861.T", "prime", source="theme_discovery")
+    atlas.add_company("physical_ai", "6506.T", "prime", source="manual")
 
     write_dataset(
         "ticker_theme_scores",
@@ -315,7 +315,7 @@ def test_apply_river_suggestions_removes_low_score_theme_discovered_nodes(tmp_pa
                 "id": "score-6861",
                 "ticker": "6861.T",
                 "theme_id": "physical_ai",
-                "river_id": "physical_ai",
+                "value_chain_id": "physical_ai",
                 "score": 12.0,
                 "evidence_count": 1,
             },
@@ -323,7 +323,7 @@ def test_apply_river_suggestions_removes_low_score_theme_discovered_nodes(tmp_pa
                 "id": "score-6506",
                 "ticker": "6506.T",
                 "theme_id": "physical_ai",
-                "river_id": "physical_ai",
+                "value_chain_id": "physical_ai",
                 "score": 10.0,
                 "evidence_count": 1,
             },
@@ -332,25 +332,25 @@ def test_apply_river_suggestions_removes_low_score_theme_discovered_nodes(tmp_pa
         replace=True,
     )
 
-    dry = apply_river_suggestions(data_dir=str(tmp_path), tree_path=str(tree_path), dry_run=True)
+    dry = apply_value_chain_suggestions(data_dir=str(tmp_path), atlas_path=str(atlas_path), dry_run=True)
     assert dry.removed == 0
-    assert any(change["action"] == "remove_node" and change["ticker"] == "6861.T" for change in dry.changes)
-    assert RiverTree(str(tree_path)).find_ticker("6861.T")
+    assert any(change["action"] == "remove_company" and change["ticker"] == "6861.T" for change in dry.changes)
+    assert Atlas(str(atlas_path)).find_ticker("6861.T")
 
-    applied = apply_river_suggestions(data_dir=str(tmp_path), tree_path=str(tree_path), dry_run=False)
-    updated = RiverTree(str(tree_path))
+    applied = apply_value_chain_suggestions(data_dir=str(tmp_path), atlas_path=str(atlas_path), dry_run=False)
+    updated = Atlas(str(atlas_path))
 
     assert applied.removed == 1
     assert updated.find_ticker("6861.T") == []
     assert updated.find_ticker("6506.T")
 
 
-def test_apply_river_suggestions_keeps_human_reviewed_theme_nodes(tmp_path):
-    tree_path = tmp_path / "river_tree.json"
-    tree = RiverTree(str(tree_path))
-    tree.add_river("physical_ai", "Physical AI")
-    tree.add_node("physical_ai", "6861.T", "upper", source="theme_discovery")
-    tree.update_node(
+def test_apply_value_chain_suggestions_keeps_human_reviewed_theme_companies(tmp_path):
+    atlas_path = tmp_path / "atlas.json"
+    atlas = Atlas(str(atlas_path))
+    atlas.add_value_chain("physical_ai", "Physical AI")
+    atlas.add_company("physical_ai", "6861.T", "prime", source="theme_discovery")
+    atlas.update_company(
         "physical_ai",
         "6861.T",
         last_human_decision="keep",
@@ -364,7 +364,7 @@ def test_apply_river_suggestions_keeps_human_reviewed_theme_nodes(tmp_path):
                 "id": "score-6861",
                 "ticker": "6861.T",
                 "theme_id": "physical_ai",
-                "river_id": "physical_ai",
+                "value_chain_id": "physical_ai",
                 "score": 0.0,
                 "evidence_count": 0,
             }
@@ -373,7 +373,7 @@ def test_apply_river_suggestions_keeps_human_reviewed_theme_nodes(tmp_path):
         replace=True,
     )
 
-    result = apply_river_suggestions(data_dir=str(tmp_path), tree_path=str(tree_path), dry_run=False)
+    result = apply_value_chain_suggestions(data_dir=str(tmp_path), atlas_path=str(atlas_path), dry_run=False)
 
     assert result.removed == 0
-    assert RiverTree(str(tree_path)).find_ticker("6861.T")
+    assert Atlas(str(atlas_path)).find_ticker("6861.T")

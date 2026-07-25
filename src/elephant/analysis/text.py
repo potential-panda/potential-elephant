@@ -23,9 +23,9 @@ NEGATIVE_TERMS = [
 def heuristic_text_direction(text: str) -> tuple[Direction, float, str]:
     if not text:
         return "unknown", 0.0, "no text"
-    lower = text.lower()
-    positive = sum(lower.count(term.lower()) for term in POSITIVE_TERMS)
-    negative = sum(lower.count(term.lower()) for term in NEGATIVE_TERMS)
+    lowercase_text = text.lower()
+    positive = sum(lowercase_text.count(term.lower()) for term in POSITIVE_TERMS)
+    negative = sum(lowercase_text.count(term.lower()) for term in NEGATIVE_TERMS)
     raw = positive - negative
     if raw == 0:
         return "flat", 0.35, "balanced or weak narrative signal"
@@ -41,4 +41,3 @@ def llm_enabled() -> bool:
 
 def direction_score(direction: Direction) -> float:
     return DIRECTION_SCORE.get(direction, 0.0)
-

@@ -26,7 +26,7 @@ def lang_instruction(lang: str) -> str:
 
 import pandas as pd
 
-from elephant.river.tree import LAYER_LABELS, LAYERS, RiverTree
+from elephant.atlas.atlas import STAGE_LABELS, STAGES, Atlas
 
 # LLM_PROVIDER: "anthropic" (default) or "openai"
 # LLM_MODEL: override the default model for the chosen provider
@@ -54,10 +54,10 @@ def _make_client():
 
 
 class Synthesizer:
-    def __init__(self, data_dir: str, tickers_file: str, tree: Optional[RiverTree] = None):
+    def __init__(self, data_dir: str, tickers_file: str, atlas: Optional[Atlas] = None):
         self.data_dir = data_dir
         self.tickers_file = tickers_file
-        self.tree = tree
+        self.atlas = atlas
         self.client = _make_client()
         self.provider = LLM_PROVIDER
 
@@ -251,8 +251,8 @@ class Synthesizer:
 
         def fmt(c: dict) -> str:
             name   = f" ({c['name']})" if c.get("name") else ""
-            river  = f" [{c['river_id']}/{c['layer']}]" if c.get("river_id") else ""
-            laggard = f" lag {c['laggard_gap_1y']:+.1f}% vs layer" if c.get("laggard_gap_1y") is not None else ""
+            value_chain  = f" [{c['value_chain_id']}/{c['stage']}]" if c.get("value_chain_id") else ""
+            laggard = f" lag {c['laggard_gap_1y']:+.1f}% vs stage" if c.get("laggard_gap_1y") is not None else ""
             bull   = f" bull {c['bull_pct']:.0f}%" if c.get("bull_pct") is not None else ""
             bear   = f" bear {c['bear_pct']:.0f}%" if c.get("bear_pct") is not None else ""
             ret1m  = f" {c['return_1m']:+.1f}% 1m" if c.get("return_1m") is not None else ""
@@ -267,13 +267,13 @@ class Synthesizer:
             tdnet_flag = " [TDnet]" if c.get("has_tdnet_48h") else ""
             mink_flag  = " [Minkabu]" if c.get("has_minkabu") else ""
             score  = f" score:{c['score']}"
-            return f"  {c['ticker']}{name}{river}{laggard}{bull}{bear}{ret1m}{speed}{rank}{tdnet_flag}{mink_flag}{score}"
+            return f"  {c['ticker']}{name}{value_chain}{laggard}{bull}{bear}{ret1m}{speed}{rank}{tdnet_flag}{mink_flag}{score}"
 
-        # Queue A: River Candidates
+        # Queue A: Value Chain Candidates
         qa = [c for c in candidates if c["queue"] == "A"]
         if qa:
-            lines.append("## Queue A — River Candidates (confirmed theme, not yet re-rated)")
-            lines.append("These tickers fit a known thematic wave but have not caught up with layer peers.")
+            lines.append("## Queue A — Value Chain Candidates (confirmed theme, not yet re-rated)")
+            lines.append("These tickers fit a known thematic wave but have not caught up with stage peers.")
             lines.append("")
             for c in qa[:20]:
                 lines.append(fmt(c))
@@ -294,8 +294,8 @@ class Synthesizer:
         qc = [c for c in candidates if c["queue"] == "C"]
         if qc:
             lines.append("")
-            lines.append("## Queue C — Crowd Heat / Noise (no confirmed river fit)")
-            lines.append("High BBS activity but no confirmed thematic river fit. Surface for awareness only.")
+            lines.append("## Queue C — Crowd Heat / Noise (no confirmed value_chain fit)")
+            lines.append("High BBS activity but no confirmed thematic value_chain fit. Surface for awareness only.")
             lines.append("")
             for c in qc[:15]:
                 lines.append(fmt(c))
@@ -327,20 +327,20 @@ class Synthesizer:
             lines.append(f"- [{source}] {title}")
             if summary:
                 lines.append(f"  {summary}")
-        if self.tree:
+        if self.atlas:
             lines.append("")
-            lines.append("## Current River Tree (known instruments)")
-            lines.append("Use this to identify thin/empty layers for RIVER GAP hints.")
-            for river in self.tree.list_rivers():
-                by_layer = {layer: [] for layer in LAYERS}
-                for node in river.nodes:
-                    if node.layer in by_layer:
-                        by_layer[node.layer].append(node.ticker)
-                layer_parts = []
-                for layer in LAYERS:
-                    t = by_layer[layer]
-                    layer_parts.append(f"{layer}: {', '.join(t) if t else '(empty)'}")
-                lines.append(f"  {river.name}: {' | '.join(layer_parts)}")
+            lines.append("## Current Atlas (known instruments)")
+            lines.append("Use this to identify thin/empty stages for RIVER GAP hints.")
+            for value_chain in self.atlas.list_value_chains():
+                by_stage = {stage: [] for stage in STAGES}
+                for company in value_chain.companies:
+                    if company.stage in by_stage:
+                        by_stage[company.stage].append(company.ticker)
+                stage_parts = []
+                for stage in STAGES:
+                    t = by_stage[stage]
+                    stage_parts.append(f"{stage}: {', '.join(t) if t else '(empty)'}")
+                lines.append(f"  {value_chain.name}: {' | '.join(stage_parts)}")
         return "\n".join(lines)
 
     def _llm(self, system: str, context: str, max_tokens: int = 900) -> str:
@@ -366,8 +366,8 @@ class Synthesizer:
         from elephant.candidates import CandidateMetrics
         since = datetime.now() - timedelta(hours=48)
 
-        tree_path = os.path.join(self.data_dir, "river_tree.json") if self.tree else None
-        candidates = CandidateMetrics(self.data_dir, self.tickers_file, tree_path=tree_path).build()
+        atlas_path = os.path.join(self.data_dir, "atlas.json") if self.atlas else None
+        candidates = CandidateMetrics(self.data_dir, self.tickers_file, atlas_path=atlas_path).build()
 
         if not candidates:
             return "No tickers found. Run `python src/cli.py fetch --dataset yjp_bbs_rank` first."
@@ -385,17 +385,17 @@ class Synthesizer:
 
         date_str = datetime.now().strftime("%Y-%m-%d")
 
-        river_context = ""
-        if self.tree and self.tree.list_rivers():
-            river_context = "\nKnown rivers: " + ", ".join(r.name for r in self.tree.list_rivers())
-            river_context += "\nLayers: source → upper → middle (highest alpha) → lower"
+        value_chain_context = ""
+        if self.atlas and self.atlas.list_value_chains():
+            value_chain_context = "\nKnown value_chains: " + ", ".join(r.name for r in self.atlas.list_value_chains())
+            value_chain_context += "\nStages: source → prime → bottleneck (highest alpha) → capacity"
 
         # --- Call 1: Japanese hints from BBS + Minkabu ---
         jp_system = f"""\
 あなたは自己投資家向けのデイリーダイジェストを書く金融リサーチスカウトです。
 
 投資家の戦略：テーマ波（確認済みリバー）の中で、まだ市場に再評価されていない銘柄を探す。
-保有期間は数週間〜数ヶ月。ヒントは調査のきっかけであり、売買シグナルではない。{river_context}
+保有期間は数週間〜数ヶ月。ヒントは調査のきっかけであり、売買シグナルではない。{value_chain_context}
 
 入力データはすでに3つのキューに分類されています：
 - Queue A: リバー適合 + レイヤー平均比で出遅れ → 最優先で調査価値あり
@@ -416,20 +416,20 @@ TDnet開示がある銘柄は、開示内容がセンチメントと一致・相
 トーン：意見ははっきりと、でも謙虚に。ヘッダー行（=== Elephant...）は出力しないこと。\
 """
 
-        # --- Call 2: English hints from news + river tree ---
+        # --- Call 2: English hints from news + atlas ---
         en_system = f"""\
 You are a financial research scout writing part of a Daily Digest for a self-directed investor.
-The investor holds positions for weeks to months and does their own research after reading the digest.{river_context}
+The investor holds positions for weeks to months and does their own research after reading the digest.{value_chain_context}
 
-Write 2 to 3 hints in English based ONLY on the news headlines and river tree below.
+Write 2 to 3 hints in English based ONLY on the news headlines and atlas below.
 Use these hint types:
-- [RIVER GAP]: a layer in a known river that is empty or thin — suggest what type of instrument to look for
+- [RIVER GAP]: a stage in a known value_chain that is empty or thin — suggest what type of instrument to look for
 - [MACRO OBSERVATION]: a macro, currency, or geopolitical angle worth watching
-- [SECTOR THEME]: a theme emerging from multiple news items pointing at the same supply chain layer
+- [SECTOR THEME]: a theme emerging from multiple news items pointing at the same supply chain stage
 
 Each hint: 3 to 5 lines. End with "→ Worth looking at..." or "→ Worth checking..."
-State which news items or river gap triggered the hint.
-Do not suggest tickers already in the river tree.
+State which news items or value_chain gap triggered the hint.
+Do not suggest tickers already in the atlas.
 Tone: opinionated but humble.
 Do NOT output a header line (no === Elephant Digest... line).\
 """

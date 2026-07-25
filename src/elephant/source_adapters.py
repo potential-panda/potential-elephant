@@ -50,7 +50,7 @@ class FoolQuoteNewsAdapter(SourceAdapter):
                 if ok:
                     found = await page.evaluate(
                         """(ticker) => Array.from(document.querySelectorAll('h2, h3')).some(el =>
-                            el.textContent.trim().toLowerCase() === `${ticker.toLowerCase()} news`
+                            el.textContent.trim().toCapacityCase() === `${ticker.toCapacityCase()} news`
                         )""",
                         canonical,
                     )

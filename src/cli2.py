@@ -23,11 +23,11 @@ from elephant.ticker_registry import normalize_ticker
 from elephant.analysis.catalog import list_data
 from elephant.analysis.pipeline import analyze_ticker, save_analysis
 from elephant.analysis.batch import run_daily_analysis
-from elephant.theme.apply import apply_river_suggestions
-from elephant.theme.builder import build_theme_river_system
+from elephant.theme.apply import apply_value_chain_suggestions
+from elephant.theme.builder import build_theme_value_chain_system
 from elephant.theme.catalog import list_theme_sources
 from elephant.theme.harvest import harvest_theme_sources
-from elephant.theme.io import import_etf_holdings_csv, import_theme_members_csv, load_river_suggestions, load_theme_source_themes, load_ticker_theme_scores
+from elephant.theme.io import import_etf_holdings_csv, import_theme_members_csv, load_value_chain_suggestions, load_theme_source_themes, load_ticker_theme_scores
 
 
 def sources_list_cmd(args):
@@ -238,7 +238,7 @@ def themes_import_etf_cmd(args):
 
 
 def themes_build_cmd(args):
-    result = build_theme_river_system(save=args.save)
+    result = build_theme_value_chain_system(save=args.save)
     print(
         f"theme build score_rows={result.score_rows} suggestion_rows={result.suggestion_rows} "
         f"generated_at={result.generated_at}"
@@ -255,7 +255,7 @@ def themes_scores_cmd(args):
         print(
             f"{row.get('ticker',''):<10} {row.get('theme_id',''):<26} "
             f"score={float(row.get('score') or 0):>6.2f} evidence={int(row.get('evidence_count') or 0):<3} "
-            f"river={row.get('river_id','')}"
+            f"value_chain={row.get('value_chain_id','')}"
         )
 
 
@@ -274,23 +274,23 @@ def themes_source_themes_cmd(args):
 
 
 def themes_suggestions_cmd(args):
-    df = load_river_suggestions()
+    df = load_value_chain_suggestions()
     if df.empty:
-        print("No river suggestions found. Run `themes build --save` first.")
+        print("No value_chain suggestions found. Run `themes build --save` first.")
         return
     if not args.include_existing and "status" in df.columns:
         df = df[df["status"] != "existing"]
     df = df.sort_values(["score"], ascending=False).head(args.limit)
     for _, row in df.iterrows():
         print(
-            f"{row.get('ticker',''):<10} {row.get('status',''):<9} {row.get('river_id',''):<14} "
-            f"{row.get('layer',''):<7} score={float(row.get('score') or 0):>6.2f} "
+            f"{row.get('ticker',''):<10} {row.get('status',''):<9} {row.get('value_chain_id',''):<14} "
+            f"{row.get('stage',''):<7} score={float(row.get('score') or 0):>6.2f} "
             f"theme={row.get('theme_id','')}"
         )
 
 
 def themes_apply_cmd(args):
-    result = apply_river_suggestions(
+    result = apply_value_chain_suggestions(
         min_score=args.min_score,
         min_us_score=args.min_us_score,
         remove_min_score=args.remove_min_score,
@@ -305,14 +305,14 @@ def themes_apply_cmd(args):
         f"removed={result.removed} skipped={result.skipped}"
     )
     for change in result.changes[: args.limit]:
-        if change["action"] == "add_node":
+        if change["action"] == "add_company":
             print(
-                f"  add {change['ticker']} -> {change['river_id']}[{change['layer']}] "
+                f"  add {change['ticker']} -> {change['value_chain_id']}[{change['stage']}] "
                 f"score={change['score']:.2f} confidence={change['confidence']}"
             )
-        elif change["action"] == "remove_node":
+        elif change["action"] == "remove_company":
             print(
-                f"  remove {change['ticker']} from {change['river_id']} "
+                f"  remove {change['ticker']} from {change['value_chain_id']} "
                 f"score={change['score']:.2f} reason={change['reason']}"
             )
         else:
@@ -329,7 +329,7 @@ def main():
     analysis = subparsers.add_parser("analysis", help="Analysis component commands")
     analysis_subs = analysis.add_subparsers(dest="analysis_cmd")
 
-    themes = subparsers.add_parser("themes", help="Build theme evidence and river suggestions")
+    themes = subparsers.add_parser("themes", help="Build theme evidence and value_chain suggestions")
     theme_subs = themes.add_subparsers(dest="themes_cmd")
 
     list_parser = source_subs.add_parser("list", help="List source catalog")
@@ -380,7 +380,7 @@ def main():
     theme_harvest_sources = theme_subs.add_parser("harvest-sources", help="Harvest configured source links")
     theme_harvest_sources.add_argument("--source", help="Harvest one source_id")
 
-    theme_build = theme_subs.add_parser("build", help="Build ticker-theme scores and river suggestions")
+    theme_build = theme_subs.add_parser("build", help="Build ticker-theme scores and value_chain suggestions")
     theme_build.add_argument("--save", action="store_true", help="Save output datasets")
 
     theme_scores = theme_subs.add_parser("scores", help="Show latest ticker-theme scores")
@@ -389,11 +389,11 @@ def main():
     theme_source_themes = theme_subs.add_parser("source-themes", help="Show latest raw source themes")
     theme_source_themes.add_argument("--limit", type=int, default=50)
 
-    theme_suggestions = theme_subs.add_parser("suggestions", help="Show latest river suggestions")
+    theme_suggestions = theme_subs.add_parser("suggestions", help="Show latest value_chain suggestions")
     theme_suggestions.add_argument("--limit", type=int, default=50)
     theme_suggestions.add_argument("--include-existing", action="store_true")
 
-    theme_apply = theme_subs.add_parser("apply", help="Apply saved river suggestions to river_tree.json")
+    theme_apply = theme_subs.add_parser("apply", help="Apply saved value_chain suggestions to atlas.json")
     theme_apply.add_argument("--min-score", type=float, default=30.0)
     theme_apply.add_argument("--min-us-score", type=float)
     theme_apply.add_argument("--remove-min-score", type=float, default=28.0)
@@ -401,10 +401,10 @@ def main():
     theme_apply.add_argument(
         "--keep-low-score",
         action="store_true",
-        help="Do not remove theme-discovered tree nodes whose latest score is below remove-min-score",
+        help="Do not remove theme-discovered atlas companies whose latest score is below remove-min-score",
     )
     theme_apply.add_argument("--suggestion-id")
-    theme_apply.add_argument("--dry-run", action="store_true", help="Preview changes without editing the tree")
+    theme_apply.add_argument("--dry-run", action="store_true", help="Preview changes without editing the atlas")
     theme_apply.add_argument("--limit", type=int, default=50, help="Limit printed changes")
 
     args = parser.parse_args()

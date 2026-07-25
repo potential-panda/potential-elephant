@@ -8,8 +8,8 @@ from datetime import datetime
 
 import pandas as pd
 
-from elephant.config import DATA_DIR, TREE_PATH
-from elephant.river.tree import RiverTree
+from elephant.config import DATA_DIR, ATLAS_PATH
+from elephant.atlas.atlas import Atlas
 from elephant.theme.catalog import get_theme_definition
 from elephant.theme.io import (
     clear_dataset_partition,
@@ -105,9 +105,9 @@ def _assign_theme_rows(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
-def _existing_tree_tickers(tree_path: str = TREE_PATH) -> set[str]:
-    tree = RiverTree(tree_path)
-    return {node.ticker for river in tree.list_rivers() for node in river.nodes}
+def _existing_atlas_tickers(atlas_path: str = ATLAS_PATH) -> set[str]:
+    atlas = Atlas(atlas_path)
+    return {company.ticker for value_chain in atlas.list_value_chains() for company in value_chain.companies}
 
 
 def build_ticker_theme_scores(data_dir: str = DATA_DIR) -> pd.DataFrame:
@@ -176,8 +176,8 @@ def build_ticker_theme_scores(data_dir: str = DATA_DIR) -> pd.DataFrame:
             "ticker": ticker,
             "theme_id": theme_id,
             "theme_name": definition.name if definition else theme_id,
-            "river_id": definition.river_id if definition else "",
-            "layer_hint": definition.layer_hint if definition else "",
+            "value_chain_id": definition.value_chain_id if definition else "",
+            "stage_hint": definition.stage_hint if definition else "",
             "raw_score": round(raw_score, 4),
             "score": _normalize_score(raw_score),
             "assigned": _normalize_score(raw_score) >= 50.0,
@@ -212,10 +212,10 @@ def _build_similarity(score_df: pd.DataFrame) -> dict[str, list[dict]]:
     return result
 
 
-def build_river_suggestions(score_df: pd.DataFrame, tree_path: str = TREE_PATH) -> pd.DataFrame:
+def build_value_chain_suggestions(score_df: pd.DataFrame, atlas_path: str = ATLAS_PATH) -> pd.DataFrame:
     if score_df.empty:
         return pd.DataFrame()
-    known = _existing_tree_tickers(tree_path)
+    known = _existing_atlas_tickers(atlas_path)
     similarity = _build_similarity(score_df)
     grouped = defaultdict(list)
     for _, row in score_df.iterrows():
@@ -226,7 +226,7 @@ def build_river_suggestions(score_df: pd.DataFrame, tree_path: str = TREE_PATH) 
     for ticker, rows in grouped.items():
         rows = sorted(rows, key=lambda r: (r["score"], r["evidence_count"]), reverse=True)
         best = rows[0]
-        if not best.get("river_id") or not bool(best.get("assigned")):
+        if not best.get("value_chain_id") or not bool(best.get("assigned")):
             continue
         is_jp = is_jp_ticker(ticker)
         confidence = (
@@ -238,11 +238,11 @@ def build_river_suggestions(score_df: pd.DataFrame, tree_path: str = TREE_PATH) 
         )
         peers = similarity.get(ticker, [])
         suggestions.append({
-            "id": row_id("river_suggestion", ticker, best["theme_id"], generated_at),
+            "id": row_id("value_chain_suggestion", ticker, best["theme_id"], generated_at),
             "ticker": ticker,
             "market": "JP" if is_jp else "US",
-            "river_id": best["river_id"],
-            "layer": best["layer_hint"] or "middle",
+            "value_chain_id": best["value_chain_id"],
+            "stage": best["stage_hint"] or "bottleneck",
             "theme_id": best["theme_id"],
             "theme_name": best["theme_name"],
             "score": best["score"],
@@ -264,9 +264,9 @@ def build_river_suggestions(score_df: pd.DataFrame, tree_path: str = TREE_PATH) 
     return pd.DataFrame(suggestions).sort_values(["status", "score"], ascending=[False, False])
 
 
-def build_theme_river_system(data_dir: str = DATA_DIR, tree_path: str = TREE_PATH, save: bool = False) -> ThemeBuildResult:
+def build_theme_value_chain_system(data_dir: str = DATA_DIR, atlas_path: str = ATLAS_PATH, save: bool = False) -> ThemeBuildResult:
     scores = build_ticker_theme_scores(data_dir)
-    suggestions = build_river_suggestions(scores, tree_path)
+    suggestions = build_value_chain_suggestions(scores, atlas_path)
     if save:
         save_theme_definitions(data_dir)
         save_theme_sources(data_dir)
@@ -275,9 +275,9 @@ def build_theme_river_system(data_dir: str = DATA_DIR, tree_path: str = TREE_PAT
         else:
             clear_dataset_partition("ticker_theme_scores", data_dir)
         if not suggestions.empty:
-            write_dataset("river_suggestions", suggestions.to_dict("records"), data_dir, replace=True)
+            write_dataset("value_chain_suggestions", suggestions.to_dict("records"), data_dir, replace=True)
         else:
-            clear_dataset_partition("river_suggestions", data_dir)
+            clear_dataset_partition("value_chain_suggestions", data_dir)
     return ThemeBuildResult(
         score_rows=0 if scores.empty else len(scores),
         suggestion_rows=0 if suggestions.empty else len(suggestions),

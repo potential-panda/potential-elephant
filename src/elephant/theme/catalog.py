@@ -8,8 +8,8 @@ from typing import Literal
 class ThemeDefinition:
     theme_id: str
     name: str
-    river_id: str
-    layer_hint: str
+    value_chain_id: str
+    stage_hint: str
     source: str = "seed"
     source_url: str = ""
     theme_purity: float = 1.0
@@ -53,7 +53,7 @@ THEME_DEFINITIONS: dict[str, ThemeDefinition] = {
         "ai_infrastructure",
         "AI Infrastructure",
         "ai_infra",
-        "source",
+        "driver",
         source_url="https://minkabu.jp/theme",
         theme_purity=1.0,
         description="AI infrastructure CapEx, data centers, compute buildout.",
@@ -62,7 +62,7 @@ THEME_DEFINITIONS: dict[str, ThemeDefinition] = {
         "ai_semiconductors",
         "AI Semiconductors",
         "ai_infra",
-        "upper",
+        "prime",
         theme_purity=0.95,
         description="GPU, accelerator, semiconductor, networking, and memory exposure.",
     ),
@@ -70,7 +70,7 @@ THEME_DEFINITIONS: dict[str, ThemeDefinition] = {
         "ai_power",
         "AI Power and Grid",
         "ai_infra",
-        "lower",
+        "capacity",
         theme_purity=0.9,
         description="Power generation, nuclear, utilities, and grid capacity for AI load.",
     ),
@@ -78,7 +78,7 @@ THEME_DEFINITIONS: dict[str, ThemeDefinition] = {
         "semiconductor_equipment",
         "Semiconductor Equipment",
         "tech_local",
-        "upper",
+        "prime",
         theme_purity=0.95,
         description="Lithography, wafer fabrication, inspection, and test equipment.",
     ),
@@ -86,7 +86,7 @@ THEME_DEFINITIONS: dict[str, ThemeDefinition] = {
         "factory_automation",
         "Factory Automation",
         "tech_local",
-        "lower",
+        "capacity",
         theme_purity=0.8,
         description="Automation and industrial equipment for localized manufacturing.",
     ),
@@ -94,7 +94,7 @@ THEME_DEFINITIONS: dict[str, ThemeDefinition] = {
         "physical_ai",
         "Physical AI",
         "physical_ai",
-        "source",
+        "driver",
         source_url="https://minkabu.jp/theme/%E3%83%95%E3%82%A3%E3%82%B8%E3%82%AB%E3%83%ABAI",
         theme_purity=1.0,
         description="Embodied AI, robotics, sensors, actuators, and automation.",
@@ -103,7 +103,7 @@ THEME_DEFINITIONS: dict[str, ThemeDefinition] = {
         "robotics",
         "Robotics and Automation",
         "physical_ai",
-        "upper",
+        "prime",
         theme_purity=0.9,
         description="Robotics platforms and automation systems.",
     ),
@@ -111,7 +111,7 @@ THEME_DEFINITIONS: dict[str, ThemeDefinition] = {
         "robotics_components",
         "Robotics Components",
         "physical_ai",
-        "middle",
+        "bottleneck",
         theme_purity=0.95,
         description="Motors, gears, sensors, and precision components.",
     ),
@@ -119,7 +119,7 @@ THEME_DEFINITIONS: dict[str, ThemeDefinition] = {
         "glp1_longevity",
         "GLP-1 and Longevity",
         "longevity",
-        "source",
+        "driver",
         theme_purity=0.95,
         description="GLP-1, metabolic therapies, and demographic longevity demand.",
     ),
@@ -127,7 +127,7 @@ THEME_DEFINITIONS: dict[str, ThemeDefinition] = {
         "medtech_devices",
         "Medical Technology Devices",
         "longevity",
-        "upper",
+        "prime",
         theme_purity=0.8,
         description="Medical devices, surgical robotics, diabetes devices, and care platforms.",
     ),
@@ -135,7 +135,7 @@ THEME_DEFINITIONS: dict[str, ThemeDefinition] = {
         "pharma_supply_chain",
         "Pharma Supply Chain",
         "longevity",
-        "lower",
+        "capacity",
         theme_purity=0.85,
         description="Drug delivery, packaging, cold chain, and pharmaceutical distribution.",
     ),

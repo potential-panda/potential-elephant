@@ -2,8 +2,8 @@
 Deep Dive: full research brief on a single ticker.
 
 Collects: yfinance fundamentals + price history, BBS sentiment trend,
-recent BBS comments, Minkabu analyst consensus, news mentions, river
-tree position — then calls the LLM for a structured brief.
+recent BBS comments, Minkabu analyst consensus, news mentions, value_chain
+atlas position — then calls the LLM for a structured brief.
 """
 
 import glob
@@ -15,7 +15,7 @@ from typing import Optional
 
 import pandas as pd
 
-from elephant.river.tree import LAYERS, RiverTree
+from elephant.atlas.atlas import STAGES, Atlas
 from elephant.synthesizer import (
     LLM_MODEL,
     LLM_PROVIDER,
@@ -29,9 +29,9 @@ from elephant.synthesizer import (
 
 
 class Diver:
-    def __init__(self, data_dir: str, tree: Optional[RiverTree] = None):
+    def __init__(self, data_dir: str, atlas: Optional[Atlas] = None):
         self.data_dir = data_dir
-        self.tree = tree
+        self.atlas = atlas
         self.client = _make_client()
         self.provider = LLM_PROVIDER
 
@@ -152,22 +152,22 @@ class Diver:
         except Exception:
             return []
 
-    def _river_position(self, ticker_t: str) -> str:
-        if not self.tree:
-            return "River tree not loaded."
-        matches = self.tree.find_ticker(ticker_t)
+    def _value_chain_position(self, ticker_t: str) -> str:
+        if not self.atlas:
+            return "Atlas not loaded."
+        matches = self.atlas.find_ticker(ticker_t)
         if matches:
             parts = []
-            for river, node in matches:
-                parts.append(f"Already in river '{river.name}' at layer '{node.layer}': {node.role}")
+            for value_chain, company in matches:
+                parts.append(f"Already in value_chain '{value_chain.name}' at stage '{company.stage}': {company.role}")
             return "\n".join(parts)
-        return "Not currently in the river tree."
+        return "Not currently in the atlas."
 
-    def _river_peer_comparison(self, ticker_t: str) -> str:
-        """Build a table comparing this ticker's returns vs its layer peers."""
-        if not self.tree:
+    def _value_chain_peer_comparison(self, ticker_t: str) -> str:
+        """Build a table comparing this ticker's returns vs its stage peers."""
+        if not self.atlas:
             return ""
-        matches = self.tree.find_ticker(ticker_t)
+        matches = self.atlas.find_ticker(ticker_t)
         if not matches:
             return ""
 
@@ -202,9 +202,9 @@ class Diver:
                 return None
 
         lines = []
-        for river, node in matches:
-            peers = [n for n in river.nodes if n.layer == node.layer]
-            header = f"River peers: {river.name} / {node.layer}"
+        for value_chain, company in matches:
+            peers = [n for n in value_chain.companies if n.stage == company.stage]
+            header = f"Value Chain peers: {value_chain.name} / {company.stage}"
             lines.append(header)
             lines.append(f"{'Ticker':<12} {'1m':>6} {'3m':>6} {'6m':>6} {'1y':>7}")
             lines.append("-" * 38)
@@ -289,13 +289,13 @@ class Diver:
                 lines.append(f"  - {n}")
         lines.append("")
 
-        lines.append("## River Tree Position")
-        lines.append(self._river_position(ticker_t))
+        lines.append("## Atlas Position")
+        lines.append(self._value_chain_position(ticker_t))
 
-        peer_table = self._river_peer_comparison(ticker_t)
+        peer_table = self._value_chain_peer_comparison(ticker_t)
         if peer_table:
             lines.append("")
-            lines.append("## River Peer Comparison")
+            lines.append("## Value Chain Peer Comparison")
             lines.append(peer_table)
 
         return "\n".join(lines)
@@ -361,7 +361,7 @@ You are a financial research analyst writing a Deep Dive brief for a self-direct
 The investor holds positions for weeks to months and does their own final research.
 They want to understand: what this company actually does, why the BBS community is interested,
 whether the sentiment is credible or just momentum noise, and where it fits in the
-Thematic Supply Chain River framework (source → upper → middle → lower).
+Thematic Supply Chain Value Chain framework (driver -> prime -> bottleneck -> capacity).
 
 Write a structured brief with these sections:
 
@@ -380,17 +380,17 @@ Note any qualitative signals from the comments.
 ## Price Context
 Key price observations: where it sits in its 52w range, recent momentum, volume signal.
 
-## River Fit
-Does this belong in one of the 4 rivers (ai_infra, tech_local, physical_ai, longevity)?
-Which layer? Or is it a speculative outlier with no clean fit?
+## Value Chain Fit
+Does this belong in one of the 4 value_chains (ai_infra, tech_local, physical_ai, longevity)?
+Which stage? Or is it a speculative outlier with no clean fit?
 If the company produces materials, components, or specialty chemicals for electronics/semiconductors,
-consider whether it fits as a middle-layer supplier in tech_local or ai_infra before concluding "no fit".
-If a River Peer Comparison table is provided above, explicitly compare this ticker's returns vs
-its layer peers and note whether it is a laggard, in-line, or leader relative to those peers.
+consider whether it fits as a bottleneck-stage supplier in tech_local or ai_infra before concluding "no fit".
+If a Value Chain Peer Comparison table is provided above, explicitly compare this ticker's returns vs
+its stage peers and note whether it is a laggard, in-line, or leader relative to those peers.
 
 ## Verdict
 3–5 sentences. Worth investigating further, or noise? What would change your mind?
-End with one of: → Add to watchlist | → River candidate: [river/layer] | → Pass for now
+End with one of: → Add to watchlist | → Value Chain candidate: [value_chain/stage] | → Pass for now
 
 Style: direct and honest. Flag speculation clearly. "Worth investigating" not "Buy this."
 {lang_instruction(lang)}\

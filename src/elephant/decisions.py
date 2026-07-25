@@ -1,5 +1,5 @@
 """
-Decision log — persists pass/watch/river_candidate decisions per ticker.
+Decision log — persists pass/watch/value_chain_candidate decisions per ticker.
 
 Stored at $DATA_DIR/decisions.json as a dict keyed by ticker.
 CandidateMetrics uses this to suppress previously-passed tickers.
@@ -12,7 +12,7 @@ from typing import Optional
 
 from elephant.config import DECISIONS_FILE
 
-VALID_DECISIONS = {"pass", "watch", "river_candidate", "needs_manual_research"}
+VALID_DECISIONS = {"pass", "watch", "value_chain_candidate", "needs_manual_research"}
 
 
 def _load() -> dict:

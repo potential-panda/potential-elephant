@@ -70,8 +70,8 @@ def load_ticker_theme_scores(data_dir: str = DATA_DIR) -> pd.DataFrame:
     return _read_latest_dataset("ticker_theme_scores", data_dir)
 
 
-def load_river_suggestions(data_dir: str = DATA_DIR) -> pd.DataFrame:
-    return _read_latest_dataset("river_suggestions", data_dir)
+def load_value_chain_suggestions(data_dir: str = DATA_DIR) -> pd.DataFrame:
+    return _read_latest_dataset("value_chain_suggestions", data_dir)
 
 
 def save_theme_definitions(data_dir: str = DATA_DIR) -> int:

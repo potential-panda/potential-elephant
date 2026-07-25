@@ -44,7 +44,7 @@ export const getSourceRuns = (limit = 20) => api2Fetch(`/source-runs?limit=${enc
 export const getSourceRegistry = () => api2Fetch('/source-registry')
 export const getSourceDefinitions = (scope = 'ticker') => api2Fetch(`/sources?scope=${encodeURIComponent(scope)}`)
 
-export const getTree = () => api2Fetch('/tree')
+export const getAtlas = () => api2Fetch('/atlas')
 
 export const startDive = (ticker) =>
   apiFetch('/dive', { method: 'POST', body: JSON.stringify({ ticker }) })

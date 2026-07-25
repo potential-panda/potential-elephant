@@ -21,7 +21,7 @@ function fmtInt(v) {
   return Number(v).toFixed(0)
 }
 
-function fmtDriver(v) {
+function fmtDvalue_chain(v) {
   if (v == null || Number.isNaN(v)) return '—'
   return Number(v).toFixed(0)
 }
@@ -83,8 +83,8 @@ export default function Candidates() {
       const as = Number(a.score ?? 0)
       const bs = Number(b.score ?? 0)
       if (bs !== as) return bs - as
-      const ad = Number(a.d1_river_fit ?? 0)
-      const bd = Number(b.d1_river_fit ?? 0)
+      const ad = Number(a.d1_value_chain_fit ?? 0)
+      const bd = Number(b.d1_value_chain_fit ?? 0)
       if (bd !== ad) return bd - ad
       return String(a.ticker || '').localeCompare(String(b.ticker || ''))
     })
@@ -154,11 +154,11 @@ export default function Candidates() {
             </thead>
             <tbody>
               {visibleRows.map((row, idx) => {
-                const setup = (row.d1_river_fit ?? 0) + (row.d2_layer_alpha ?? 0) + (row.d3_relative_laggard ?? 0)
+                const setup = (row.d1_value_chain_fit ?? 0) + (row.d2_stage_alpha ?? 0) + (row.d3_relative_laggard ?? 0)
                 const signals = row.signal_families || []
                 const reason = row.priority_reason || row.queue_reason || '—'
                 const peerLag = row.peer_group_laggard_gap_1y ?? row.laggard_gap_1y
-                const benchmark = row.peer_group_laggard_gap_1y == null ? 'layer' : 'peer'
+                const benchmark = row.peer_group_laggard_gap_1y == null ? 'stage' : 'peer'
 
                 return (
                   <tr
@@ -176,8 +176,8 @@ export default function Candidates() {
                         />
                         <div className="flex items-center gap-2 text-[11px] text-slate-500 whitespace-nowrap overflow-hidden">
                           <span>{row.market}</span>
-                          {row.river_name && <span className="truncate">{row.river_name}</span>}
-                          {row.layer && <span className="text-slate-600">/{row.layer}</span>}
+                          {row.value_chain_name && <span className="truncate">{row.value_chain_name}</span>}
+                          {row.stage && <span className="text-slate-600">/{row.stage}</span>}
                         </div>
                       </div>
                     </td>
@@ -188,7 +188,7 @@ export default function Candidates() {
                       {fmtInt(row.score)}
                     </td>
                     <td className="px-3 py-3 text-right font-mono text-xs text-slate-300 whitespace-nowrap" title="D1 + D2 + D3">
-                      {fmtDriver(setup)}
+                      {fmtDvalue_chain(setup)}
                     </td>
                     <td className="px-3 py-3 text-xs text-slate-400 max-w-[180px]">
                       <span title={row.causal_edge || row.behind_reason || row.peer_group || ''}>
@@ -206,10 +206,10 @@ export default function Candidates() {
                       {peerLag != null && <span className="text-slate-600"> {benchmark}</span>}
                     </td>
                     <td className="px-3 py-3 text-right font-mono text-xs text-slate-300 whitespace-nowrap" title="D5">
-                      {fmtDriver(row.d5_attention_change)}
+                      {fmtDvalue_chain(row.d5_attention_change)}
                     </td>
                     <td className="px-3 py-3 text-right font-mono text-xs text-slate-300 whitespace-nowrap" title="D4">
-                      {fmtDriver(row.d4_catalyst)}
+                      {fmtDvalue_chain(row.d4_catalyst)}
                     </td>
                     <td className="px-3 py-3 text-right font-mono text-xs text-slate-300 whitespace-nowrap">
                       {row.bull_pct != null || row.bear_pct != null ? (

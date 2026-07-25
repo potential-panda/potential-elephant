@@ -8,15 +8,15 @@ from datetime import datetime, timedelta
 
 import pandas as pd
 
-from elephant.river.tree import LAYERS, RiverTree
+from elephant.atlas.atlas import STAGES, Atlas
 from elephant.synthesizer import LLM_MODEL, LLM_PROVIDER, _ANTHROPIC_DEFAULT, _OPENAI_DEFAULT, _make_client
 
 
 class Discoverer:
-    def __init__(self, data_dir: str, tickers_file: str, tree: RiverTree):
+    def __init__(self, data_dir: str, tickers_file: str, atlas: Atlas):
         self.data_dir = data_dir
         self.tickers_file = tickers_file
-        self.tree = tree
+        self.atlas = atlas
         self.client = _make_client()
         self.provider = LLM_PROVIDER
 
@@ -87,7 +87,7 @@ class Discoverer:
         pattern = os.path.join(self.data_dir, "dataset=news_headlines", "date=*", "data.parquet")
         files = glob.glob(pattern)
         matches = []
-        kw_lower = keyword.lower()
+        kw_capacity = keyword.lower()
         for f in files:
             try:
                 df = pd.read_parquet(f)
@@ -96,39 +96,39 @@ class Discoverer:
                 for _, row in recent.iterrows():
                     title = str(row.get("title", ""))
                     summary = str(row.get("summary", ""))
-                    if kw_lower in title.lower() or kw_lower in summary.lower():
+                    if kw_capacity in title.lower() or kw_capacity in summary.lower():
                         matches.append(f"[{row.get('source','')}] {title}")
             except Exception:
                 pass
         return matches[:20]
 
-    # --- River tree context ---
+    # --- Atlas context ---
 
-    def _tree_summary(self) -> str:
-        lines = ["Current river tree (what is already mapped):"]
-        for river in self.tree.list_rivers():
-            node_str = ", ".join(f"{n.ticker}[{n.layer}]" for n in river.nodes)
-            lines.append(f"  {river.id} ({river.name}): {node_str or '(empty)'}")
+    def _atlas_summary(self) -> str:
+        lines = ["Current atlas (what is already mapped):"]
+        for value_chain in self.atlas.list_value_chains():
+            company_str = ", ".join(f"{n.ticker}[{n.stage}]" for n in value_chain.companies)
+            lines.append(f"  {value_chain.id} ({value_chain.name}): {company_str or '(empty)'}")
         return "\n".join(lines)
 
     # --- Claude classification ---
 
     def _classify(self, ticker: str, extra_context: str = "") -> dict:
         signals = self._load_ticker_signals(ticker)
-        tree_summary = self._tree_summary()
+        atlas_summary = self._atlas_summary()
 
         prompt = f"""\
-You are a financial analyst classifying a stock into a thematic supply chain river framework.
+You are a financial analyst classifying a stock into a thematic supply chain value_chain framework.
 
-Layer definitions:
-  source  — Where CapEx or policy funding originates (hyperscalers, government mandates)
-  upper   — Core designers absorbing the initial capital surge (e.g., GPU designers, foundries)
-  middle  — Specialized suppliers where physical bottlenecks emerge (highest alpha, 2-3x potential)
-  lower   — Real-world capacity constraints sustaining the trend (power, logistics, infrastructure)
+Stage definitions:
+  driver — Where CapEx or policy funding originates (hyperscalers, government mandates)
+  prime   — Core designers absorbing the initial capital surge (e.g., GPU designers, foundries)
+  bottleneck  — Specialized suppliers where physical bottlenecks emerge (highest alpha, 2-3x potential)
+  capacity   — Real-world capacity constraints sustaining the trend (power, logistics, infrastructure)
 
-{tree_summary}
+{atlas_summary}
 
-Known river IDs and themes:
+Known value_chain IDs and themes:
   ai_infra    — AI Infrastructure Supercycle (Hyperscaler CapEx → compute → power)
   tech_local  — Tech Localization & Onshoring (geopolitics → precision tools → industrial RE)
   physical_ai — Embodied Physical AI (edge AI → actuators/sensors → automation)
@@ -141,10 +141,10 @@ Available signals for {ticker}:
 Respond ONLY with valid JSON, no other text:
 {{
   "ticker": "{ticker}",
-  "fits_existing_river": true or false,
-  "river_id": "<river id or null>",
-  "new_river_name": "<suggest a name only if fits_existing_river is false and a new river is warranted, else null>",
-  "layer": "<source|upper|middle|lower or null>",
+  "fits_existing_value_chain": true or false,
+  "value_chain_id": "<value_chain id or null>",
+  "new_value_chain_name": "<suggest a name only if fits_existing_value_chain is false and a new value_chain is warranted, else null>",
+  "stage": "<driver|prime|bottleneck|capacity or null>",
   "name": "<company full name>",
   "market": "<US or JP>",
   "role": "<one sentence: what this company does in the supply chain>",
@@ -200,13 +200,13 @@ Headlines:
         return results
 
     def scan_unknown_tickers(self) -> list[dict]:
-        """Scan BBS hot tickers not yet in the tree and classify them."""
+        """Scan BBS hot tickers not yet in the atlas and classify them."""
         if not os.path.exists(self.tickers_file):
             return []
         with open(self.tickers_file) as f:
             hot_tickers = [line.strip() for line in f if line.strip()]
 
-        known = {n.ticker for river in self.tree.list_rivers() for n in river.nodes}
+        known = {n.ticker for value_chain in self.atlas.list_value_chains() for n in value_chain.companies}
         # Check both with and without .T suffix
         known_base = {t.replace(".T", "") for t in known}
         unknown = [
@@ -217,10 +217,10 @@ Headlines:
         suggestions = []
         for ticker in unknown[:10]:  # limit API calls per run
             result = self._classify(ticker)
-            if result and result.get("fits_existing_river") and result.get("confidence") in ("high", "medium"):
+            if result and result.get("fits_existing_value_chain") and result.get("confidence") in ("high", "medium"):
                 suggestions.append(result)
                 logging.info(
-                    f"[Discover] {ticker} → {result.get('river_id')} "
-                    f"[{result.get('layer')}] confidence={result.get('confidence')}"
+                    f"[Discover] {ticker} → {result.get('value_chain_id')} "
+                    f"[{result.get('stage')}] confidence={result.get('confidence')}"
                 )
         return suggestions

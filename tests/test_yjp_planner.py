@@ -11,18 +11,18 @@ from elephant.yjp.harvester import YahooFinanceHarvester
 from elephant.yjp.planner import YahooFinancePlanner
 
 
-def _write_tree(path):
+def _write_atlas(path):
     data = {
         "version": 2,
-        "rivers": [
+        "value_chains": [
             {
                 "id": "ai_infra",
                 "name": "AI Infrastructure Supercycle",
-                "nodes": [
-                    {"ticker": "MSFT", "layer": "source", "name": "Microsoft"},
-                    {"ticker": "AAPL", "layer": "source", "name": "Apple"},
-                    {"ticker": "NVDA", "layer": "upper", "name": "NVIDIA"},
-                    {"ticker": "7203.T", "layer": "source", "name": "Toyota"},
+                "companies": [
+                    {"ticker": "MSFT", "stage": "driver", "name": "Microsoft"},
+                    {"ticker": "AAPL", "stage": "driver", "name": "Apple"},
+                    {"ticker": "NVDA", "stage": "prime", "name": "NVIDIA"},
+                    {"ticker": "7203.T", "stage": "driver", "name": "Toyota"},
                 ],
             }
         ],
@@ -32,14 +32,14 @@ def _write_tree(path):
 
 def test_confirmed_us_bbs_tickers_get_full_yahoo_scrape(tmp_path):
     tickers_file = tmp_path / "tickers.txt"
-    tree_path = tmp_path / "river_tree.json"
+    atlas_path = tmp_path / "atlas.json"
     tickers_file.write_text("3350.T\n", encoding="utf-8")
-    _write_tree(tree_path)
+    _write_atlas(atlas_path)
 
     mark_yahoo_jp_bbs(str(tickers_file), "MSFT", True)
     mark_yahoo_jp_bbs(str(tickers_file), "AAPL", False)
 
-    planner = YahooFinancePlanner(Store(str(tmp_path)), str(tickers_file), tree_path=str(tree_path))
+    planner = YahooFinancePlanner(Store(str(tmp_path)), str(tickers_file), atlas_path=str(atlas_path))
     tasks = planner.create()
     args_by_ticker = {task.harvester.ticker: task.args for task in tasks}
 

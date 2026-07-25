@@ -18,7 +18,7 @@ The ticker registry is the universe of instruments the system may care about.
 Inputs:
 - `tickers.txt`: active JP/BBS-ranked tickers and manually tracked JP tickers.
 - `tickers-us.txt`: active US tickers known to have at least one supported source.
-- River tree tickers: human-curated tracked companies.
+- Atlas tickers: human-curated tracked companies.
 - Optional watchlist/manual imports.
 
 The registry should answer:
@@ -88,7 +88,7 @@ The source registry is also where source-specific URL resolution belongs. For
 example:
 - Canonical ticker `7203.T` may become source symbol `7203` for Minkabu.
 - Canonical ticker `7203.T` may remain `7203.T` for Yahoo Finance JP.
-- Canonical ticker `SMCI` may become lowercase `smci` in Fool quote URLs.
+- Canonical ticker `SMCI` may become capacitycase `smci` in Fool quote URLs.
 
 Once a URL is stored here, the harvester should not re-derive it from the
 ticker.
@@ -115,7 +115,7 @@ A source availability check job should:
   status.
 
 This stage intentionally consumes symbol-format gaps between sources. If a
-source omits `.T`, lowercases US tickers, uses exchange path segments, or
+source omits `.T`, capacitycases US tickers, uses exchange path segments, or
 requires any other URL-specific ticker form, the availability check handles it
 and writes the exact URL into the source registry.
 
@@ -147,7 +147,7 @@ Harvester rules:
 - Read the exact URL from the source registry and scrape it as-is.
 - Record `last_harvested_at`, row counts, and errors back to the source registry.
 - If repeated harvests fail, mark the ticker-source pair as `degraded`.
-- Store raw/source-backed content in datasets with enough provenance to trace
+- Store raw/evidence-backed content in datasets with enough provenance to trace
   every later analysis point back to a URL.
 
 ### 5. Scheduler
@@ -188,17 +188,17 @@ Inputs per ticker:
 - Latest harvested content by source.
 - Source registry availability and freshness.
 - Price history.
-- River tree context.
+- Atlas context.
 - Decision memory.
 
 LLM jobs should produce structured intermediate facts, not the final score
 directly:
-- `summary`: concise source-backed ticker summary.
+- `summary`: concise evidence-backed ticker summary.
 - `sentiment`: bullish, neutral, bearish, mixed, or unknown.
 - `sentiment_confidence`: 0-1.
-- `catalysts`: list of source-backed catalysts.
-- `risks`: list of source-backed risks.
-- `river_relevance`: fit to existing river/layer, if any.
+- `catalysts`: list of evidence-backed catalysts.
+- `risks`: list of evidence-backed risks.
+- `value_chain_relevance`: fit to existing value_chain/stage, if any.
 - `evidence`: URL-backed references used by the analysis.
 
 The final score should be calculated by deterministic code from structured

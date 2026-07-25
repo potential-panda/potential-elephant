@@ -73,9 +73,9 @@ function PositionCard({ pos, onRemove }) {
                 {snap.market}
               </span>
             )}
-            {snap.river_id && (
+            {snap.value_chain_id && (
               <span style={{ fontSize: 10, color: '#00dc96', fontFamily: 'monospace' }}>
-                {snap.river_id}{snap.layer ? <span style={{ color: '#3a6050' }}>/{snap.layer}</span> : null}
+                {snap.value_chain_id}{snap.stage ? <span style={{ color: '#3a6050' }}>/{snap.stage}</span> : null}
               </span>
             )}
           </div>
@@ -223,7 +223,7 @@ export default function Watchlist() {
         <div style={{ color: '#3a5060', fontSize: 14, fontFamily: 'monospace', paddingTop: 40, textAlign: 'center' }}>
           No positions yet.<br />
           <span style={{ fontSize: 12, marginTop: 8, display: 'block' }}>
-            Click "River Candidate" on any stock in the Candidates tab to track it here.
+            Click "Value Chain Candidate" on any stock in the Candidates tab to track it here.
           </span>
         </div>
       )}

@@ -1,2 +1,2 @@
-"""Offline theme and river evidence builders."""
+"""Offline theme and value_chain evidence builders."""
 

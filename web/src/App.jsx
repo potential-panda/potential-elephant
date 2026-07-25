@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import Layout from './components/Layout'
 import Tickers from './components/Tickers'
-import Tree from './components/Tree'
+import Atlas from './components/Atlas'
 import Dive from './components/Dive'
 import Detail from './components/Detail'
 import Candidates from './components/Candidates'
@@ -10,7 +10,7 @@ import System from './components/System'
 
 const TAB_COMPONENTS = {
   candidates: Candidates,
-  tree: Tree,
+  atlas: Atlas,
   watchlist: Watchlist,
   tickers: Tickers,
   dive: Dive,

@@ -6,9 +6,9 @@ from datetime import datetime
 
 import pandas as pd
 
-from elephant.config import DATA_DIR, TREE_PATH
-from elephant.river.tree import RiverTree
-from elephant.theme.io import load_river_suggestions, load_ticker_theme_scores
+from elephant.config import DATA_DIR, ATLAS_PATH
+from elephant.atlas.atlas import Atlas
+from elephant.theme.io import load_value_chain_suggestions, load_ticker_theme_scores
 from elephant.ticker_registry import is_jp_ticker, normalize_ticker
 
 
@@ -82,33 +82,33 @@ def _eligible_rows(
     return rows.sort_values(["score", "evidence_count"], ascending=[False, False])
 
 
-def _score_by_ticker_river(scores: pd.DataFrame) -> dict[tuple[str, str], float]:
+def _score_by_ticker_value_chain(scores: pd.DataFrame) -> dict[tuple[str, str], float]:
     if scores.empty:
         return {}
     result: dict[tuple[str, str], float] = {}
     for _, row in scores.iterrows():
         ticker = normalize_ticker(str(row.get("ticker", "")).strip().upper())
-        river_id = str(row.get("river_id", "")).strip()
-        if not ticker or not river_id:
+        value_chain_id = str(row.get("value_chain_id", "")).strip()
+        if not ticker or not value_chain_id:
             continue
         score = float(row.get("score") or 0.0)
-        key = (ticker, river_id)
+        key = (ticker, value_chain_id)
         result[key] = max(result.get(key, 0.0), score)
     return result
 
 
-def _removable_theme_node(node) -> bool:
-    if node.source != "theme_discovery":
+def _removable_theme_company(company) -> bool:
+    if company.source != "theme_discovery":
         return False
-    if node.last_human_decision or node.last_human_decision_date:
+    if company.last_human_decision or company.last_human_decision_date:
         return False
     return True
 
 
-def apply_river_suggestions(
+def apply_value_chain_suggestions(
     *,
     data_dir: str = DATA_DIR,
-    tree_path: str = TREE_PATH,
+    atlas_path: str = ATLAS_PATH,
     min_score: float = 30.0,
     min_us_score: float | None = None,
     remove_min_score: float = 28.0,
@@ -117,9 +117,9 @@ def apply_river_suggestions(
     suggestion_id: str | None = None,
     dry_run: bool = True,
 ) -> ThemeApplyResult:
-    suggestions = load_river_suggestions(data_dir)
+    suggestions = load_value_chain_suggestions(data_dir)
     rows = _eligible_rows(suggestions, min_score, min_us_score, suggestion_id)
-    tree = RiverTree(tree_path)
+    atlas = Atlas(atlas_path)
     changes = []
     applied = 0
     removed = 0
@@ -128,63 +128,63 @@ def apply_river_suggestions(
     if remove_low_score and not suggestion_id:
         scores = load_ticker_theme_scores(data_dir)
         if not scores.empty:
-            scores_by_key = _score_by_ticker_river(scores)
+            scores_by_key = _score_by_ticker_value_chain(scores)
             removals = []
-            for river in tree.list_rivers():
-                for node in river.nodes:
-                    if not _removable_theme_node(node):
+            for value_chain in atlas.list_value_chains():
+                for company in value_chain.companies:
+                    if not _removable_theme_company(company):
                         continue
-                    current_score = scores_by_key.get((node.ticker, river.id), 0.0)
+                    current_score = scores_by_key.get((company.ticker, value_chain.id), 0.0)
                     threshold = (
                         float(remove_min_us_score)
-                        if remove_min_us_score is not None and not is_jp_ticker(node.ticker)
+                        if remove_min_us_score is not None and not is_jp_ticker(company.ticker)
                         else float(remove_min_score)
                     )
                     if current_score >= threshold:
                         continue
-                    removals.append((river.id, node.ticker, current_score, threshold))
+                    removals.append((value_chain.id, company.ticker, current_score, threshold))
 
-            for river_id, ticker, current_score, threshold in sorted(removals, key=lambda item: (item[0], item[1])):
+            for value_chain_id, ticker, current_score, threshold in sorted(removals, key=lambda item: (item[0], item[1])):
                 change = {
-                    "action": "remove_node",
+                    "action": "remove_company",
                     "ticker": ticker,
-                    "river_id": river_id,
+                    "value_chain_id": value_chain_id,
                     "score": current_score,
                     "reason": f"theme score below remove threshold {threshold}",
                 }
                 changes.append(change)
                 if dry_run:
                     continue
-                if tree.remove_node(river_id, ticker):
+                if atlas.remove_company(value_chain_id, ticker):
                     removed += 1
                 else:
                     skipped += 1
 
     for _, row in rows.iterrows():
         ticker = normalize_ticker(str(row.get("ticker", "")).strip().upper())
-        river_id = str(row.get("river_id", "")).strip()
-        layer = str(row.get("layer", "")).strip()
-        if not ticker or not river_id or not layer:
+        value_chain_id = str(row.get("value_chain_id", "")).strip()
+        stage = str(row.get("stage", "")).strip()
+        if not ticker or not value_chain_id or not stage:
             skipped += 1
-            changes.append({"action": "skip", "ticker": ticker, "reason": "missing ticker, river_id, or layer"})
+            changes.append({"action": "skip", "ticker": ticker, "reason": "missing ticker, value_chain_id, or stage"})
             continue
-        river = tree.get_river(river_id)
-        if not river:
+        value_chain = atlas.get_value_chain(value_chain_id)
+        if not value_chain:
             skipped += 1
-            changes.append({"action": "skip", "ticker": ticker, "river_id": river_id, "reason": "river not found"})
+            changes.append({"action": "skip", "ticker": ticker, "value_chain_id": value_chain_id, "reason": "value_chain not found"})
             continue
-        existing = any(node.ticker == ticker for node in river.nodes)
+        existing = any(company.ticker == ticker for company in value_chain.companies)
         if existing:
             skipped += 1
-            changes.append({"action": "skip", "ticker": ticker, "river_id": river_id, "reason": "already in river"})
+            changes.append({"action": "skip", "ticker": ticker, "value_chain_id": value_chain_id, "reason": "already in value_chain"})
             continue
 
-        suggestion_ref = f"river_suggestion:{row.get('id', '')}"
+        suggestion_ref = f"value_chain_suggestion:{row.get('id', '')}"
         change = {
-            "action": "add_node",
+            "action": "add_company",
             "ticker": ticker,
-            "river_id": river_id,
-            "layer": layer,
+            "value_chain_id": value_chain_id,
+            "stage": stage,
             "score": float(row.get("score") or 0),
             "confidence": str(row.get("confidence") or "medium"),
             "peer_group": str(row.get("peer_group") or row.get("theme_id") or ""),
@@ -194,10 +194,10 @@ def apply_river_suggestions(
         if dry_run:
             continue
 
-        node = tree.add_node(
-            river_id=river_id,
+        company = atlas.add_company(
+            value_chain_id=value_chain_id,
             ticker=ticker,
-            layer=layer,
+            stage=stage,
             market=str(row.get("market") or "US"),
             name=str(row.get("name") or ""),
             role=str(row.get("reason") or ""),
@@ -207,8 +207,8 @@ def apply_river_suggestions(
             competitor_tickers=[str(item) for item in _as_list(row.get("competitor_tickers"))],
             leader_tickers=[str(item) for item in _as_list(row.get("leader_tickers"))],
         )
-        tree.update_node(
-            river_id,
+        atlas.update_company(
+            value_chain_id,
             ticker,
             status="proposed",
             confidence=change["confidence"],

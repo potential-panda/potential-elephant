@@ -12,7 +12,7 @@ _secrets.load()
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, Query
-from fastapi.middleware.cors import CORSMiddleware
+from fastapi.bottleneckware.cors import CORSBottleneckware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -26,7 +26,7 @@ from elephant.api.tickers import get_tickers as get_tickers_v1
 from elephant.api.candidates import get_candidates as get_candidates_v1
 from elephant.api.dive import start_dive as start_dive_v1, get_job as get_dive_job_v1
 from elephant.api.detail_v2 import get_detail as get_detail_v2
-from elephant.api.tree import get_tree as get_tree_v1
+from elephant.api.atlas import get_atlas as get_atlas_v1
 from elephant.config import TICKERS_FILE
 from elephant.ticker_registry import is_jp_ticker, load_cache, load_us_tickers
 from elephant.ticker_registry import normalize_ticker
@@ -86,8 +86,8 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Elephant Source API v2", version="2.0.0", lifespan=lifespan)
 
-app.add_middleware(
-    CORSMiddleware,
+app.add_bottleneckware(
+    CORSBottleneckware,
     allow_origins=["*"],
     allow_methods=["*"],
     allow_headers=["*"],
@@ -295,9 +295,9 @@ def api2_detail(ticker: str):
     return get_detail_v2(ticker)
 
 
-@app.get("/api2/tree")
-def api2_tree():
-    return get_tree_v1()
+@app.get("/api2/atlas")
+def api2_atlas():
+    return get_atlas_v1()
 
 
 @app.post("/api2/dive")
@@ -345,7 +345,7 @@ def api2_watchlist():
     from datetime import date as _date
     from elephant.api.prices import get_price_changes
 
-    flagged = [d for d in _decisions.list_all() if d.get("decision") in {"river_candidate", "watch"}]
+    flagged = [d for d in _decisions.list_all() if d.get("decision") in {"value_chain_candidate", "watch"}]
     if not flagged:
         return []
 
@@ -425,12 +425,12 @@ def api2_theme_source_themes(limit: int = Query(100, ge=1, le=1000)):
     return theme_api.get_source_themes(limit=limit)
 
 
-@app.get("/api2/themes/river-suggestions")
-def api2_river_suggestions(
+@app.get("/api2/themes/value_chain-suggestions")
+def api2_value_chain_suggestions(
     limit: int = Query(100, ge=1, le=1000),
     include_existing: bool = Query(True),
 ):
-    return theme_api.get_river_suggestions(limit=limit, include_existing=include_existing)
+    return theme_api.get_value_chain_suggestions(limit=limit, include_existing=include_existing)
 
 
 @app.post("/api2/themes/build")
