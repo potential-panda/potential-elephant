@@ -119,7 +119,9 @@ class ThemeHarvestRequest(BaseModel):
 
 class ThemeApplyRequest(BaseModel):
     min_score: float = 30.0
+    min_us_score: float | None = None
     remove_min_score: float = 28.0
+    remove_min_us_score: float | None = None
     remove_low_score: bool = True
     suggestion_id: str | None = None
     dry_run: bool = True
@@ -450,7 +452,9 @@ def api2_theme_harvest_sources(req: ThemeHarvestRequest):
 def api2_theme_apply(req: ThemeApplyRequest):
     return theme_api.apply_suggestions(
         min_score=req.min_score,
+        min_us_score=req.min_us_score,
         remove_min_score=req.remove_min_score,
+        remove_min_us_score=req.remove_min_us_score,
         remove_low_score=req.remove_low_score,
         suggestion_id=req.suggestion_id,
         dry_run=req.dry_run,

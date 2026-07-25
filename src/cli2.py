@@ -292,7 +292,9 @@ def themes_suggestions_cmd(args):
 def themes_apply_cmd(args):
     result = apply_river_suggestions(
         min_score=args.min_score,
+        min_us_score=args.min_us_score,
         remove_min_score=args.remove_min_score,
+        remove_min_us_score=args.remove_min_us_score,
         remove_low_score=not args.keep_low_score,
         suggestion_id=args.suggestion_id,
         dry_run=args.dry_run,
@@ -393,7 +395,9 @@ def main():
 
     theme_apply = theme_subs.add_parser("apply", help="Apply saved river suggestions to river_tree.json")
     theme_apply.add_argument("--min-score", type=float, default=30.0)
+    theme_apply.add_argument("--min-us-score", type=float)
     theme_apply.add_argument("--remove-min-score", type=float, default=28.0)
+    theme_apply.add_argument("--remove-min-us-score", type=float)
     theme_apply.add_argument(
         "--keep-low-score",
         action="store_true",

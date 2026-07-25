@@ -22,6 +22,8 @@ from elephant.theme.io import (
 )
 from elephant.ticker_registry import is_jp_ticker, normalize_ticker
 
+ETF_WRAPPER_TICKERS = {"AIQ", "URA", "FWDI"}
+
 
 @dataclass
 class ThemeBuildResult:
@@ -95,6 +97,10 @@ def _assign_theme_rows(df: pd.DataFrame) -> pd.DataFrame:
             | ((group["evidence_count"].astype(float) >= 2) & (theme_scores >= 30.0))
             | ((theme_scores >= relative_threshold) & (theme_scores >= 28.0))
         )
+        us_globalx = group["ticker"].astype(str).map(lambda value: not is_jp_ticker(value)) & group[
+            "evidence_json"
+        ].astype(str).str.contains("globalx_jp_fund_list", regex=False)
+        assigned = assigned | (us_globalx & (theme_scores >= 15.0))
         df.loc[group.index, "assigned"] = assigned
     return df
 
@@ -113,6 +119,8 @@ def build_ticker_theme_scores(data_dir: str = DATA_DIR) -> pd.DataFrame:
             theme_id = str(row.get("theme_id", "")).strip()
             ticker = normalize_ticker(str(row.get("ticker", "")).strip().upper())
             if not theme_id or not ticker:
+                continue
+            if ticker in ETF_WRAPPER_TICKERS:
                 continue
             definition = get_theme_definition(theme_id)
             if not definition and theme_id.startswith("raw_"):
@@ -220,12 +228,19 @@ def build_river_suggestions(score_df: pd.DataFrame, tree_path: str = TREE_PATH) 
         best = rows[0]
         if not best.get("river_id") or not bool(best.get("assigned")):
             continue
-        confidence = "high" if best["score"] >= 30 else "medium" if best["score"] >= 28 else "low"
+        is_jp = is_jp_ticker(ticker)
+        confidence = (
+            "high"
+            if best["score"] >= 30
+            else "medium"
+            if best["score"] >= (28 if is_jp else 15)
+            else "low"
+        )
         peers = similarity.get(ticker, [])
         suggestions.append({
             "id": row_id("river_suggestion", ticker, best["theme_id"], generated_at),
             "ticker": ticker,
-            "market": "JP" if is_jp_ticker(ticker) else "US",
+            "market": "JP" if is_jp else "US",
             "river_id": best["river_id"],
             "layer": best["layer_hint"] or "middle",
             "theme_id": best["theme_id"],

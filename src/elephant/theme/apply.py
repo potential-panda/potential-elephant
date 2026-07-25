@@ -9,7 +9,7 @@ import pandas as pd
 from elephant.config import DATA_DIR, TREE_PATH
 from elephant.river.tree import RiverTree
 from elephant.theme.io import load_river_suggestions, load_ticker_theme_scores
-from elephant.ticker_registry import normalize_ticker
+from elephant.ticker_registry import is_jp_ticker, normalize_ticker
 
 
 @dataclass
@@ -56,14 +56,27 @@ def _as_list(value) -> list:
     return [value]
 
 
-def _eligible_rows(df: pd.DataFrame, min_score: float, suggestion_id: str | None) -> pd.DataFrame:
+def _eligible_rows(
+    df: pd.DataFrame,
+    min_score: float,
+    min_us_score: float | None,
+    suggestion_id: str | None,
+) -> pd.DataFrame:
     if df.empty:
         return df
     rows = df.copy()
     if suggestion_id:
         rows = rows[rows["id"].astype(str).eq(str(suggestion_id))]
     else:
-        rows = rows[rows["score"].astype(float) >= float(min_score)]
+        scores = rows["score"].astype(float)
+        market = rows.get("market", "").astype(str) if "market" in rows.columns else ""
+        if min_us_score is None:
+            rows = rows[scores >= float(min_score)]
+        else:
+            rows = rows[
+                ((market == "US") & (scores >= float(min_us_score)))
+                | ((market != "US") & (scores >= float(min_score)))
+            ]
         if "status" in rows.columns:
             rows = rows[rows["status"].astype(str).ne("existing")]
     return rows.sort_values(["score", "evidence_count"], ascending=[False, False])
@@ -97,13 +110,15 @@ def apply_river_suggestions(
     data_dir: str = DATA_DIR,
     tree_path: str = TREE_PATH,
     min_score: float = 30.0,
+    min_us_score: float | None = None,
     remove_min_score: float = 28.0,
+    remove_min_us_score: float | None = None,
     remove_low_score: bool = True,
     suggestion_id: str | None = None,
     dry_run: bool = True,
 ) -> ThemeApplyResult:
     suggestions = load_river_suggestions(data_dir)
-    rows = _eligible_rows(suggestions, min_score, suggestion_id)
+    rows = _eligible_rows(suggestions, min_score, min_us_score, suggestion_id)
     tree = RiverTree(tree_path)
     changes = []
     applied = 0
@@ -120,17 +135,22 @@ def apply_river_suggestions(
                     if not _removable_theme_node(node):
                         continue
                     current_score = scores_by_key.get((node.ticker, river.id), 0.0)
-                    if current_score >= float(remove_min_score):
+                    threshold = (
+                        float(remove_min_us_score)
+                        if remove_min_us_score is not None and not is_jp_ticker(node.ticker)
+                        else float(remove_min_score)
+                    )
+                    if current_score >= threshold:
                         continue
-                    removals.append((river.id, node.ticker, current_score))
+                    removals.append((river.id, node.ticker, current_score, threshold))
 
-            for river_id, ticker, current_score in sorted(removals, key=lambda item: (item[0], item[1])):
+            for river_id, ticker, current_score, threshold in sorted(removals, key=lambda item: (item[0], item[1])):
                 change = {
                     "action": "remove_node",
                     "ticker": ticker,
                     "river_id": river_id,
                     "score": current_score,
-                    "reason": f"theme score below remove threshold {remove_min_score}",
+                    "reason": f"theme score below remove threshold {threshold}",
                 }
                 changes.append(change)
                 if dry_run:

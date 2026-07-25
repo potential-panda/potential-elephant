@@ -78,15 +78,20 @@ def test_theme_index_harvests_globalx_funds_then_fund_tickers(tmp_path, monkeypa
 
     index_url = "https://globalxetfs.co.jp/funds/list.html"
     detail_url = "https://globalxetfs.co.jp/funds/2640/index.html"
+    csv_url = "https://www.solactive.com/downloads/etfservices/tse-pcf/single/2640.csv"
     pages = {
         index_url: "<a href='/funds/2640/index.html'>グローバルＸ ゲーム＆アニメ-日本株式 ETF</a>",
-        detail_url: "<html><body><a href='/stock/?code=7974'>7974</a><a href='/stock/?code=7832'>7832</a></body></html>",
+        detail_url: f"<html><body><a href='{csv_url}'>全銘柄情報</a></body></html>",
+        csv_url: (
+            "ETF Code,ETF Name,Fund Cash Component,Shares Outstanding,Fund Date\n"
+            "2640,Global X Game ETF,0,100,20260727\n\n"
+            "Code,Name,ISIN,Exchange,Currency,Shares Amount,Stock Price\n"
+            "7974,NINTENDO CO LTD,JP3756600007,XTKS,JPY,100,100\n"
+            "7832,BANDAI NAMCO HOLDINGS,JP3778630008,XTKS,JPY,100,100\n"
+        ),
     }
-    monkeypatch.setattr(
-        harvest_module,
-        "_fetch_text",
-        lambda url: pages[url],
-    )
+    monkeypatch.setattr(harvest_module, "_fetch_text_browser", lambda url, wait_ms=2500: pages[url])
+    monkeypatch.setattr(harvest_module, "_fetch_text_with_browser_fallback", lambda url: pages[url])
 
     dataset, rows = harvest_theme_source(get_theme_source("globalx_jp_fund_list"), str(tmp_path))
 
@@ -95,6 +100,132 @@ def test_theme_index_harvests_globalx_funds_then_fund_tickers(tmp_path, monkeypa
     result = build_theme_river_system(str(tmp_path), tree_path=str(tmp_path / "river_tree.json"), save=True)
     assert result.score_rows == 0
     assert result.suggestion_rows == 0
+
+
+def test_theme_index_harvests_globalx_us_holdings_from_solactive_csv(tmp_path, monkeypatch):
+    import elephant.theme.harvest as harvest_module
+
+    index_url = "https://globalxetfs.co.jp/funds/list.html"
+    detail_url = "https://globalxetfs.co.jp/funds/2244/index.html"
+    csv_url = "https://www.solactive.com/downloads/etfservices/tse-pcf/single/2244.csv"
+    pages = {
+        index_url: "<a href='/funds/2244/index.html'>グローバルＸ US テック・トップ20 ETF</a>",
+        detail_url: f"<html><body><a href='{csv_url}'>全銘柄情報</a></body></html>",
+        csv_url: (
+            "ETF Code,ETF Name,Fund Cash Component,Shares Outstanding,Fund Date\n"
+            "2244,Global X US Tech Top 20 ETF,0,100,20260727\n\n"
+            "Code,Name,ISIN,Exchange,Currency,Shares Amount,Stock Price\n"
+            ",APPLE INC,US0378331005,XNAS,USD,100,100\n"
+            ",INTUITIVE SURGICAL INC,US46120E6023,XNAS,USD,100,100\n"
+            "nan,CASHUSDJPY01,,USD,1,1\n"
+        ),
+    }
+    monkeypatch.setattr(harvest_module, "_fetch_text_browser", lambda url, wait_ms=2500: pages[url])
+    monkeypatch.setattr(harvest_module, "_fetch_text_with_browser_fallback", lambda url: pages[url])
+    monkeypatch.setattr(
+        harvest_module,
+        "_resolve_us_symbol",
+        lambda isin, name: {"US0378331005": "AAPL", "US46120E6023": "ISRG"}.get(isin, ""),
+    )
+
+    dataset, rows = harvest_theme_source(get_theme_source("globalx_jp_fund_list"), str(tmp_path))
+
+    assert dataset == "theme_source_themes,theme_members"
+    assert rows == 3
+    scores = build_ticker_theme_scores(str(tmp_path))
+    assert set(scores["ticker"]) == {"AAPL", "ISRG"}
+    assert set(scores["theme_id"]) == {"ai_infrastructure"}
+    assert scores["assigned"].all()
+
+
+def test_apply_uses_market_specific_thresholds(tmp_path):
+    tree_path = tmp_path / "river_tree.json"
+    tree = RiverTree(str(tree_path))
+    tree.add_river("ai_infra", "AI Infrastructure")
+    write_dataset(
+        "river_suggestions",
+        [
+            {
+                "id": "us-low",
+                "ticker": "AAPL",
+                "market": "US",
+                "river_id": "ai_infra",
+                "layer": "upper",
+                "theme_id": "ai_infrastructure",
+                "theme_name": "AI Infrastructure",
+                "score": 16.0,
+                "confidence": "medium",
+                "status": "proposed",
+                "evidence_count": 1,
+            },
+            {
+                "id": "jp-low",
+                "ticker": "2158.T",
+                "market": "JP",
+                "river_id": "ai_infra",
+                "layer": "source",
+                "theme_id": "ai_infrastructure",
+                "theme_name": "AI Infrastructure",
+                "score": 16.0,
+                "confidence": "medium",
+                "status": "proposed",
+                "evidence_count": 1,
+            },
+        ],
+        str(tmp_path),
+        replace=True,
+    )
+
+    result = apply_river_suggestions(
+        data_dir=str(tmp_path),
+        tree_path=str(tree_path),
+        min_score=25,
+        min_us_score=15,
+        remove_low_score=False,
+        dry_run=True,
+    )
+
+    assert result.evaluated == 1
+    assert result.changes[0]["ticker"] == "AAPL"
+
+
+def test_apply_uses_market_specific_remove_thresholds(tmp_path):
+    tree_path = tmp_path / "river_tree.json"
+    tree = RiverTree(str(tree_path))
+    tree.add_river("ai_infra", "AI Infrastructure")
+    tree.add_node("ai_infra", "AAPL", "source", source="theme_discovery")
+    write_dataset(
+        "ticker_theme_scores",
+        [
+            {
+                "id": "score-aapl",
+                "ticker": "AAPL",
+                "theme_id": "ai_infrastructure",
+                "river_id": "ai_infra",
+                "score": 16.0,
+                "evidence_count": 1,
+            }
+        ],
+        str(tmp_path),
+        replace=True,
+    )
+
+    kept = apply_river_suggestions(
+        data_dir=str(tmp_path),
+        tree_path=str(tree_path),
+        remove_min_score=20,
+        remove_min_us_score=12,
+        dry_run=True,
+    )
+    removed = apply_river_suggestions(
+        data_dir=str(tmp_path),
+        tree_path=str(tree_path),
+        remove_min_score=20,
+        dry_run=True,
+    )
+
+    assert not any(change["action"] == "remove_node" for change in kept.changes)
+    assert any(change["action"] == "remove_node" for change in removed.changes)
 
 
 def test_theme_index_harvests_themes_then_theme_tickers(tmp_path, monkeypatch):

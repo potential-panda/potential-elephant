@@ -54,7 +54,9 @@ def harvest_sources(source_id: str | None = None) -> dict:
 
 def apply_suggestions(
     min_score: float = 30.0,
+    min_us_score: float | None = None,
     remove_min_score: float = 28.0,
+    remove_min_us_score: float | None = None,
     remove_low_score: bool = True,
     suggestion_id: str | None = None,
     dry_run: bool = True,
@@ -62,7 +64,9 @@ def apply_suggestions(
     return apply_river_suggestions(
         data_dir=DATA_DIR,
         min_score=min_score,
+        min_us_score=min_us_score,
         remove_min_score=remove_min_score,
+        remove_min_us_score=remove_min_us_score,
         remove_low_score=remove_low_score,
         suggestion_id=suggestion_id,
         dry_run=dry_run,

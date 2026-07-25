@@ -206,9 +206,22 @@ ETF_THEME_MAP: dict[str, dict] = {}
 
 
 THEME_KEYWORDS: dict[str, tuple[str, ...]] = {
-    "ai_infrastructure": ("ai infrastructure", "data center", "データセンター", "生成ai", "人工知能"),
+    "ai_infrastructure": (
+        "ai infrastructure",
+        "artificial intelligence",
+        "ai&bigdata",
+        "ai＆bigデータ",
+        "ai＆ビッグデータ",
+        "data center",
+        "tech top",
+        "us tech",
+        "us テック",
+        "データセンター",
+        "生成ai",
+        "人工知能",
+    ),
     "ai_semiconductors": ("semiconductor", "半導体", "gpu", "hbm", "chip"),
-    "ai_power": ("power", "utility", "utilities", "nuclear", "uranium", "電力", "原子力"),
+    "ai_power": ("power", "utility", "utilities", "nuclear", "uranium", "ウラニウム", "電力", "原子力"),
     "semiconductor_equipment": ("semiconductor equipment", "半導体製造装置", "lithography", "wafer"),
     "factory_automation": ("factory automation", "automation", "industrial", "fa", "工場自動化"),
     "physical_ai": ("physical ai", "フィジカルai", "embodied ai"),

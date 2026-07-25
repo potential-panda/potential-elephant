@@ -26,6 +26,8 @@ COMMON_WORDS = {
     "FOR", "INC", "CORP", "LTD", "LLC", "NYSE", "NASDAQ", "AMEX",
 }
 NON_THEME_LABELS = ("ランキング", "プレミアム", "無料", "ログイン", "会員登録")
+US_EXCHANGES = {"NMS", "NYQ", "ASE", "PCX", "BTS", "NGM", "NCM"}
+_SYMBOL_RESOLUTION_CACHE: dict[tuple[str, str], str] = {}
 
 
 class LinkParser(HTMLParser):
@@ -60,15 +62,15 @@ def _fetch_text(url: str) -> str:
         return response.read().decode(charset, errors="ignore")
 
 
-def _fetch_text_browser(url: str) -> str:
+def _fetch_text_browser(url: str, wait_ms: int = 2500) -> str:
     async def run():
         from elephant.web_client import open_web_page, visit_page
 
         async with open_web_page() as page:
-            response = await visit_page(page, url, wait_until="domcontentloaded", timeout=30000)
+            response = await visit_page(page, url, wait_until="networkidle", timeout=60000)
             if response and response.status >= 400:
                 raise RuntimeError(f"HTTP {response.status}")
-            await page.wait_for_timeout(2500)
+            await page.wait_for_timeout(wait_ms)
             return await page.content()
 
     return asyncio.run(run())
@@ -94,6 +96,44 @@ def _normalize_weight(value):
         return float(text) if text else ""
     except Exception:
         return ""
+
+
+def _clean_symbol(value: str) -> str:
+    symbol = str(value or "").strip().upper()
+    symbol = symbol.replace(".", "-")
+    if not symbol or symbol.lower() == "nan":
+        return ""
+    if symbol in COMMON_WORDS or symbol.isdigit():
+        return ""
+    return symbol
+
+
+def _resolve_us_symbol(isin: str, name: str) -> str:
+    key = (str(isin or "").strip().upper(), str(name or "").strip().upper())
+    if key in _SYMBOL_RESOLUTION_CACHE:
+        return _SYMBOL_RESOLUTION_CACHE[key]
+    query = key[0] or key[1]
+    if not query:
+        return ""
+    try:
+        import yfinance as yf
+
+        search = yf.Search(query, max_results=8)
+        quotes = getattr(search, "quotes", []) or []
+    except Exception:
+        quotes = []
+    for quote in quotes:
+        symbol = _clean_symbol(quote.get("symbol", ""))
+        if not symbol:
+            continue
+        if quote.get("quoteType") != "EQUITY":
+            continue
+        if quote.get("exchange") not in US_EXCHANGES:
+            continue
+        _SYMBOL_RESOLUTION_CACHE[key] = symbol
+        return symbol
+    _SYMBOL_RESOLUTION_CACHE[key] = ""
+    return ""
 
 
 def _valid_jp_code(value: str) -> bool:
@@ -207,6 +247,51 @@ def extract_tickers_from_html(text: str, include_us: bool = False) -> list[str]:
     return tickers
 
 
+def _solactive_csv_url_from_html(text: str, source_url: str) -> str:
+    parser = LinkParser()
+    parser.feed(text)
+    for href, label in parser.links:
+        if "solactive.com/downloads/etfservices/tse-pcf/single/" in href and href.endswith(".csv"):
+            return href
+        if "全銘柄情報" in label and href.endswith(".csv"):
+            return urljoin(source_url, href)
+    return ""
+
+
+def _globalx_tickers_from_detail(text: str, source_url: str) -> list[str]:
+    csv_url = _solactive_csv_url_from_html(text, source_url)
+    if not csv_url:
+        return extract_tickers_from_html(text, include_us=True)
+    csv_text = _fetch_text_with_browser_fallback(csv_url)
+    lines = csv_text.splitlines()
+    header_idx = next((idx for idx, line in enumerate(lines) if line.startswith("Code,Name,ISIN,")), None)
+    if header_idx is None:
+        return []
+    df = pd.read_csv(StringIO("\n".join(lines[header_idx:])))
+    tickers = []
+    seen = set()
+    for _, row in df.iterrows():
+        name = str(row.get("Name", "") or "").strip()
+        isin = str(row.get("ISIN", "") or "").strip()
+        raw_code = str(row.get("Code", "") or "").strip().upper()
+        code = _clean_symbol(raw_code)
+        if not name or name.upper() in {"CASHUSDJPY01", "FORWARD"}:
+            continue
+        if raw_code.isdigit():
+            ticker = normalize_ticker(raw_code)
+        elif code and not code.startswith("CASH"):
+            ticker = normalize_ticker(code)
+        elif isin.startswith("JP"):
+            ticker = ""
+        else:
+            ticker = _resolve_us_symbol(isin, name)
+        if not ticker or ticker in seen:
+            continue
+        seen.add(ticker)
+        tickers.append(ticker)
+    return tickers
+
+
 def _theme_member_rows(source: ThemeSourceDefinition, tickers: list[str], theme_row: dict | None = None) -> list[dict]:
     harvested_at = datetime.now().isoformat(timespec="seconds")
     theme_id = (theme_row or {}).get("theme_id") or source.theme_id
@@ -272,7 +357,11 @@ def _etf_rows_from_frame(source: ThemeSourceDefinition, df: pd.DataFrame) -> lis
 def harvest_theme_source(source: ThemeSourceDefinition, data_dir: str = DATA_DIR) -> tuple[str, int]:
     if not source.url:
         return ("skipped", 0)
-    text = _fetch_text_with_browser_fallback(source.url)
+    text = (
+        _fetch_text_browser(source.url, wait_ms=5000)
+        if source.source_id == "globalx_jp_fund_list"
+        else _fetch_text_with_browser_fallback(source.url)
+    )
     store = Store(data_dir)
     if source.kind == "theme_index":
         theme_rows = extract_theme_links(text, source)
@@ -285,7 +374,10 @@ def harvest_theme_source(source: ThemeSourceDefinition, data_dir: str = DATA_DIR
                 detail_text = _fetch_text_with_browser_fallback(theme_row["url"])
             except Exception:
                 continue
-            tickers = extract_tickers_from_html(detail_text, include_us=source.source_id.startswith("stocktitan"))
+            if source.source_id == "globalx_jp_fund_list":
+                tickers = _globalx_tickers_from_detail(detail_text, theme_row["url"])
+            else:
+                tickers = extract_tickers_from_html(detail_text, include_us=source.source_id.startswith("stocktitan"))
             member_rows.extend(_theme_member_rows(source, tickers, theme_row))
         store.save("theme_source_themes", HarvesterResult(tags={"date": TODAY}, data=theme_rows))
         store.save("theme_members", HarvesterResult(tags={"date": TODAY}, data=member_rows))
