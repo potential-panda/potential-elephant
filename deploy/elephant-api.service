@@ -1,10 +1,10 @@
 [Unit]
-Description=Elephant Investment Research API Server
+Description=Elephant investment research API, dashboard and source scheduler on :9765
 After=network.target
 
 [Service]
 Type=simple
-WorkingDirectory=/home/lulurun/workspace/potential-elephant
+WorkingDirectory=/home/lulurun/workspace/Elephant
 Environment=PYTHONPATH=src
 Environment=PATH=/home/lulurun/.pyenv/versions/3.13.9/bin:/usr/local/bin:/usr/bin:/bin
 ExecStart=/home/lulurun/.pyenv/versions/3.13.9/bin/python src/api.py

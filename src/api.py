@@ -1,20 +1,90 @@
 import os
 import sys
+from pathlib import Path
+from datetime import datetime
 
 sys.path.insert(0, os.path.dirname(__file__))
 
 import elephant.secrets as _secrets
+
 _secrets.load()
+
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from elephant.api import candidates, datasets, detail, digest, dive, prices, schedule_status, tickers, atlas
 from elephant import decisions as _decisions
+from elephant.source.catalog import get_source, list_sources
+from elephant.source.registry import SourceRegistry
+from elephant.source.run_log import recent_runs
+from elephant.source.scheduler import create_daily_plan
+from elephant.source.scheduler_service import source_scheduler_service
+from elephant.api.tickers import get_tickers as get_tickers_v1
+from elephant.api.candidates import get_candidates as get_candidates_v1
+from elephant.api.dive import start_dive as start_dive_v1, get_job as get_dive_job_v1
+from elephant.api.detail_v2 import get_detail as get_detail_v2
+from elephant.api.atlas import get_atlas as get_atlas_v1
+from elephant.config import TICKERS_FILE
+from elephant.ticker_registry import is_jp_ticker, load_cache, load_us_tickers
+from elephant.ticker_registry import normalize_ticker
+from elephant.analysis.batch import run_daily_analysis
+from elephant.api import datasets
+from elephant.api import themes as theme_api
+from elephant.api.prices import get_price_changes
+from elephant.analysis.pipeline import analyze_ticker, load_latest_score, save_analysis
 
-app = FastAPI(title="Elephant Research Dashboard", version="1.0.0")
+
+def _parse_iso(ts: str | None):
+    if not ts:
+        return None
+    try:
+        return datetime.fromisoformat(ts)
+    except Exception:
+        return None
+
+
+def _latest_timestamp(*values: tuple[str, str | None]) -> tuple[str | None, str | None]:
+    latest_dt = None
+    latest_source = None
+    for source_name, ts in values:
+        dt = _parse_iso(ts)
+        if dt and (latest_dt is None or dt > latest_dt):
+            latest_dt = dt
+            latest_source = source_name
+    if latest_dt is None:
+        return None, None
+    return latest_dt.isoformat(timespec="seconds"), latest_source
+
+
+def _latest_speed(entry: dict) -> tuple[float | None, list[dict]]:
+    history = entry.get("speed_history", [])
+    if not isinstance(history, list):
+        return None, []
+    normalized = sorted(
+        [h for h in history if isinstance(h, dict) and h.get("date")],
+        key=lambda h: h.get("date", ""),
+        reverse=True,
+    )
+    latest = normalized[0].get("comments_per_hour") if normalized else None
+    try:
+        latest_speed = float(latest) if latest is not None else None
+    except Exception:
+        latest_speed = None
+    return latest_speed, normalized
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    if os.environ.get("ELEPHANT_API2_DISABLE_SCHEDULER", "").lower() not in {"1", "true", "yes"}:
+        source_scheduler_service.start()
+    yield
+    source_scheduler_service.stop()
+
+
+app = FastAPI(title="Elephant Source API v2", version="2.0.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -24,140 +94,233 @@ app.add_middleware(
 )
 
 
-# --- Tickers ---
+class SourceCheckRequest(BaseModel):
+    ticker: str
+    source_id: str | None = None
 
-@app.get("/api/tickers")
-def api_tickers():
-    return tickers.get_tickers()
-
-
-# --- Digest ---
-
-@app.get("/api/digest/latest")
-def api_digest_latest():
-    result = digest.get_latest()
-    if not result:
-        raise HTTPException(status_code=404, detail="No digest found")
-    return result
-
-
-@app.get("/api/digest/list")
-def api_digest_list():
-    return digest.list_digests()
-
-
-@app.get("/api/digest/{date}")
-def api_digest_by_date(date: str):
-    result = digest.get_by_date(date)
-    if not result:
-        raise HTTPException(status_code=404, detail="Digest not found")
-    return result
-
-
-@app.post("/api/digest/generate")
-def api_digest_generate():
-    job_id = digest.start_generate()
-    return {"job_id": job_id}
-
-
-# --- Schedule ---
-
-@app.get("/api/schedule/status")
-def api_schedule_status():
-    return schedule_status.get_status()
-
-
-@app.get("/api/schedule/plan")
-def api_schedule_plan():
-    return schedule_status.get_dry_run_plan()
-
-
-# --- Atlas ---
-
-@app.get("/api/atlas")
-def api_atlas():
-    return atlas.get_atlas()
-
-
-@app.get("/api/tree")
-def api_tree_alias():
-    return atlas.get_atlas()
-
-
-# --- Dive ---
 
 class DiveRequest(BaseModel):
     ticker: str
 
 
-@app.post("/api/dive")
-def api_dive_start(req: DiveRequest):
-    job_id = dive.start_dive(req.ticker)
-    return {"job_id": job_id}
+class AnalysisRequest(BaseModel):
+    ticker: str | None = None
+    limit: int | None = None
+    save: bool = True
 
 
-@app.get("/api/dive/list")
-def api_dive_list():
-    return dive.list_dives()
+class ThemeBuildRequest(BaseModel):
+    save: bool = True
 
 
-@app.get("/api/dive/{ticker}/latest")
-def api_dive_latest(ticker: str):
-    result = dive.get_latest(ticker)
-    if not result:
-        raise HTTPException(status_code=404, detail="No dive found for this ticker")
-    return result
+class ThemeHarvestRequest(BaseModel):
+    source_id: str | None = None
 
 
-# --- Jobs (polling for async tasks) ---
+class ThemeApplyRequest(BaseModel):
+    min_score: float = 30.0
+    min_us_score: float | None = None
+    remove_min_score: float = 28.0
+    remove_min_us_score: float | None = None
+    remove_low_score: bool = True
+    suggestion_id: str | None = None
+    dry_run: bool = True
 
-@app.get("/api/jobs/{job_id}")
-def api_job_status(job_id: str):
-    result = digest.get_job(job_id) or dive.get_job(job_id)
-    if not result:
-        raise HTTPException(status_code=404, detail="Job not found")
-    return result
-
-
-# --- Detail ---
-
-@app.get("/api/detail/{ticker}")
-def api_detail(ticker: str):
-    return detail.get_detail(ticker)
-
-
-# --- Candidates ---
-
-@app.get("/api/candidates")
-def api_candidates(
-    queue: str = Query(None, description="Filter by queue: A, B, C, or suppressed"),
-    include_suppressed: bool = Query(False, description="Include suppressed candidates"),
-):
-    return candidates.get_candidates(queue=queue, include_suppressed=include_suppressed)
-
-
-# --- Prices ---
-
-@app.get("/api/prices")
-def api_prices(tickers: str = Query(..., description="Comma-separated ticker list")):
-    ticker_list = [t.strip() for t in tickers.split(",") if t.strip()]
-    return prices.get_price_changes(ticker_list)
-
-
-# --- Decisions ---
 
 class DecisionRequest(BaseModel):
     ticker: str
     decision: str
     reason: str = ""
-    suppress_days: int = 30  # ignored for "pass" — escalating suppression is automatic
+    suppress_days: int = 30
     what_would_change: str = ""
     snapshot: dict = {}
     evidence_ids: list = []
 
 
-@app.post("/api/decisions")
-def api_decision_record(req: DecisionRequest):
+@app.get("/api2/sources")
+def api2_sources(scope: str | None = Query(None, pattern="^(market|ticker)$")):
+    return [s.to_dict() for s in list_sources(scope=scope)]
+
+
+@app.get("/api2/tickers")
+def api2_tickers():
+    return get_tickers_v1()
+
+
+@app.get("/api2/tickers/overview")
+def api2_tickers_overview():
+    cache = load_cache(TICKERS_FILE)
+    us_status = load_us_tickers(TICKERS_FILE)
+    registry = SourceRegistry()
+
+    rank_map: dict[str, int] = {}
+    try:
+        with Path(TICKERS_FILE).open(encoding="utf-8") as f:
+            for idx, line in enumerate(f, 1):
+                ticker = line.strip()
+                if ticker:
+                    rank_map[ticker] = idx
+    except FileNotFoundError:
+        pass
+
+    jp_tickers = set(rank_map)
+    us_tickers = {t for t in (set(cache) | set(us_status)) if not is_jp_ticker(t)}
+
+    def build_row(ticker: str) -> dict:
+        entry = cache.get(ticker) or {}
+        if isinstance(entry, str):
+            entry = {"last_seen": entry, "speed_history": []}
+        sources = registry.resolved_sources(ticker)
+        last_updated_at, last_updated_source = _latest_timestamp(
+            ("cache", entry.get("last_scraped_at")),
+            *(
+                (f"source:{source_id}", source.get("last_harvested_at"))
+                for source_id, source in sources.items()
+                if isinstance(source, dict)
+            ),
+        )
+        speed_latest, speed_history = _latest_speed(entry)
+        return {
+            "ticker": ticker,
+            "market": "JP" if ticker in jp_tickers else "US",
+            "bbs_rank": rank_map.get(ticker),
+            "last_seen": entry.get("last_seen"),
+            "last_scraped_at": entry.get("last_scraped_at"),
+            "last_updated_at": last_updated_at,
+            "last_updated_source": last_updated_source,
+            "speed_latest": speed_latest,
+            "speed_history": speed_history,
+            "sources": sources,
+            "in_tickers_us_file": ticker in us_status,
+            "us_bbs": us_status.get(ticker, {}).get("bbs"),
+            "us_minkabu": us_status.get(ticker, {}).get("minkabu"),
+        }
+
+    jp_items = sorted((build_row(t) for t in jp_tickers), key=lambda x: x["bbs_rank"] or 9999)
+    us_items = sorted((build_row(t) for t in us_tickers), key=lambda x: x["ticker"])
+
+    return {
+        "jp_items": jp_items,
+        "us_items": us_items,
+        "tickers_file": TICKERS_FILE,
+        "cache_file": TICKERS_FILE.replace("tickers.txt", "tickers.cache.json"),
+    }
+
+
+@app.get("/api2/candidates")
+def api2_candidates(
+    queue: str | None = Query(None, description="Filter by queue: A, B, C, or suppressed"),
+    include_suppressed: bool = Query(False, description="Include suppressed candidates"),
+):
+    return get_candidates_v1(queue=queue, include_suppressed=include_suppressed)
+
+
+@app.get("/api2/sources/{source_id}")
+def api2_source(source_id: str):
+    try:
+        return get_source(source_id).to_dict()
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+
+
+@app.get("/api2/source-registry")
+def api2_registry():
+    registry = SourceRegistry()
+    return registry.data
+
+
+@app.get("/api2/source-registry/{ticker}")
+def api2_registry_ticker(ticker: str):
+    registry = SourceRegistry()
+    canonical = normalize_ticker(ticker)
+    return {"ticker": canonical, **registry.get_ticker(canonical)}
+
+
+@app.get("/api2/source-plan")
+def api2_source_plan(ticker: str | None = None, source_id: str | None = None):
+    tasks = create_daily_plan()
+    if ticker:
+        canonical = normalize_ticker(ticker)
+        tasks = [t for t in tasks if t.ticker == canonical]
+    if source_id:
+        tasks = [t for t in tasks if t.source_id == source_id]
+    return [
+        {
+            "source_id": t.source_id,
+            "scope": t.scope,
+            "ticker": t.ticker,
+            "url": t.url,
+            "scheduled_at": t.scheduled_at.isoformat(),
+            "args": t.args or {},
+        }
+        for t in tasks
+    ]
+
+
+@app.get("/api2/source-scheduler/plan")
+def api2_source_scheduler_plan(ticker: str | None = None, source_id: str | None = None):
+    return api2_source_plan(ticker=ticker, source_id=source_id)
+
+
+@app.get("/api2/source-scheduler/status")
+def api2_source_scheduler_status():
+    return source_scheduler_service.status()
+
+
+@app.post("/api2/source-scheduler/start")
+def api2_source_scheduler_start():
+    started = source_scheduler_service.start()
+    return {"started": started, **source_scheduler_service.status()}
+
+
+@app.post("/api2/source-scheduler/stop")
+def api2_source_scheduler_stop():
+    stopped = source_scheduler_service.stop()
+    return {"stopped": stopped, **source_scheduler_service.status()}
+
+
+@app.post("/api2/source-scheduler/replan")
+def api2_source_scheduler_replan():
+    planned = source_scheduler_service.replan()
+    return {"planned": planned, **source_scheduler_service.status()}
+
+
+@app.get("/api2/source-runs")
+def api2_source_runs(limit: int = 100):
+    return recent_runs(limit=limit)
+
+
+@app.get("/api2/detail/{ticker}")
+def api2_detail(ticker: str):
+    return get_detail_v2(ticker)
+
+
+@app.get("/api2/atlas")
+def api2_atlas():
+    return get_atlas_v1()
+
+
+@app.get("/api2/tree")
+def api2_tree_alias():
+    return get_atlas_v1()
+
+
+@app.post("/api2/dive")
+def api2_dive_start(req: DiveRequest):
+    job_id = start_dive_v1(req.ticker)
+    return {"job_id": job_id}
+
+
+@app.get("/api2/jobs/{job_id}")
+def api2_job_status(job_id: str):
+    result = get_dive_job_v1(job_id)
+    if not result:
+        raise HTTPException(status_code=404, detail="Job not found")
+    return result
+
+
+@app.post("/api2/decisions")
+def api2_decision_record(req: DecisionRequest):
     if req.decision not in _decisions.VALID_DECISIONS:
         raise HTTPException(status_code=400, detail=f"decision must be one of {sorted(_decisions.VALID_DECISIONS)}")
     entry = _decisions.record(
@@ -171,21 +334,19 @@ def api_decision_record(req: DecisionRequest):
     return entry
 
 
-@app.get("/api/decisions")
-def api_decision_list():
+@app.get("/api2/decisions")
+def api2_decision_list():
     return _decisions.list_all()
 
 
-@app.delete("/api/decisions/{ticker}")
-def api_decision_remove(ticker: str):
+@app.delete("/api2/decisions/{ticker}")
+def api2_decision_remove(ticker: str):
     removed = _decisions.remove(ticker)
     return {"removed": removed, "ticker": ticker}
 
 
-# --- Watchlist ---
-
-@app.get("/api/watchlist")
-def api_watchlist():
+@app.get("/api2/watchlist")
+def api2_watchlist():
     from datetime import date as _date
     from elephant.api.prices import get_price_changes
 
@@ -211,7 +372,6 @@ def api_watchlist():
             except Exception:
                 pass
 
-        # Return since flag: computed from stored close vs current close
         since_flag = None
         snap_close = snap.get("last_close")
         cur_close = cp.get("last_close")
@@ -224,35 +384,86 @@ def api_watchlist():
             "days_since": days_since,
             "reason": dec.get("reason", ""),
             "snapshot": snap,
-            "current": {
-                "return_1m":  cp.get("1m"),
-                "return_3m":  cp.get("3m"),
-                "return_1y":  cp.get("1y"),
-                "last_close": cur_close,
-                "price_date": cp.get("last_date"),
-            },
+            "current": cp,
             "since_flag": since_flag,
         })
-
     return result
 
 
-# --- Datasets ---
+@app.get("/api2/prices")
+def api2_prices(tickers: str = Query(..., description="Comma-separated ticker list")):
+    ticker_list = [t.strip() for t in tickers.split(",") if t.strip()]
+    return get_price_changes(ticker_list)
 
-@app.get("/api/stats")
-def api_stats():
+
+@app.get("/api2/stats")
+def api2_stats():
     return datasets.get_stats()
 
 
-@app.get("/api/query")
-def api_query(
-    dataset: str = Query(...),
-    ticker: str = Query(None),
-    keyword: str = Query(None),
-    limit: int = Query(50),
+@app.post("/api2/analysis/run")
+def api2_analysis_run(req: AnalysisRequest):
+    if req.ticker:
+        packet, aggregate = analyze_ticker(req.ticker)
+        if req.save:
+            save_analysis(packet, aggregate)
+        return {"packet": packet.to_dict(), "aggregate": aggregate.to_dict(), "saved": req.save}
+    result = run_daily_analysis(limit=req.limit)
+    return result.to_dict()
+
+
+@app.get("/api2/analysis/{ticker}/latest")
+def api2_analysis_latest(ticker: str):
+    result = load_latest_score(ticker)
+    if not result:
+        raise HTTPException(status_code=404, detail="No analysis score found")
+    return result
+
+
+@app.get("/api2/themes/scores")
+def api2_theme_scores(limit: int = Query(100, ge=1, le=1000)):
+    return theme_api.get_theme_scores(limit=limit)
+
+
+@app.get("/api2/themes/source-themes")
+def api2_theme_source_themes(limit: int = Query(100, ge=1, le=1000)):
+    return theme_api.get_source_themes(limit=limit)
+
+
+@app.get("/api2/themes/value_chain-suggestions")
+def api2_value_chain_suggestions(
+    limit: int = Query(100, ge=1, le=1000),
+    include_existing: bool = Query(True),
 ):
-    rows = datasets.query_dataset(dataset, ticker=ticker, keyword=keyword, limit=limit)
-    return {"items": rows, "data_dir": datasets.DATA_DIR}
+    return theme_api.get_value_chain_suggestions(limit=limit, include_existing=include_existing)
+
+
+@app.post("/api2/themes/build")
+def api2_themes_build(req: ThemeBuildRequest):
+    return theme_api.build_themes(save=req.save)
+
+
+@app.get("/api2/themes/sources")
+def api2_theme_sources():
+    return theme_api.get_theme_sources()
+
+
+@app.post("/api2/themes/harvest-sources")
+def api2_theme_harvest_sources(req: ThemeHarvestRequest):
+    return theme_api.harvest_sources(source_id=req.source_id)
+
+
+@app.post("/api2/themes/apply")
+def api2_theme_apply(req: ThemeApplyRequest):
+    return theme_api.apply_suggestions(
+        min_score=req.min_score,
+        min_us_score=req.min_us_score,
+        remove_min_score=req.remove_min_score,
+        remove_min_us_score=req.remove_min_us_score,
+        remove_low_score=req.remove_low_score,
+        suggestion_id=req.suggestion_id,
+        dry_run=req.dry_run,
+    )
 
 
 # --- Serve frontend ---
@@ -264,4 +475,5 @@ if os.path.exists(DIST):
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("api:app", host="0.0.0.0", port=9765, reload=True)
+
+    uvicorn.run("api:app", host="0.0.0.0", port=9765, reload=False)

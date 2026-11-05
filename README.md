@@ -171,7 +171,7 @@ export ANTHROPIC_API_KEY=sk-...
 export ELEPHANT_DATA_DIR=/path/to/data   # default: /panda-infra/elephant
 ```
 
-Start the dashboard (also available as a systemd user service — see `elephant-api.service`):
+Start the dashboard (also available as a systemd user service — see `deploy/elephant-api.service`):
 
 ```bash
 python src/api.py
